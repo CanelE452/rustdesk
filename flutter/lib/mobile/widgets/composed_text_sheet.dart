@@ -22,51 +22,51 @@ class ComposedTextSheet extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('문장을 완성한 뒤 전송'),
-            const SizedBox(height: 12),
-            TextField(
-              key: const Key('composed-text-field'),
-              controller: controller,
-              autofocus: true,
-              minLines: 1,
-              maxLines: 5,
-              keyboardType: TextInputType.multiline,
-              textInputAction: TextInputAction.newline,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: '한글, 영문, 기호를 입력해',
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('문장을 완성한 뒤 전송'),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('composed-text-field'),
+                controller: controller,
+                autofocus: true,
+                minLines: 1,
+                maxLines: 5,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: '한글, 영문, 기호를 입력해',
+                ),
+                // No onChanged/onSubmitted: IME pre-edit stays on the phone.
               ),
-              // Do not send from onChanged/onSubmitted. IME pre-edit is local.
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('취소'),
-                ),
-                const SizedBox(width: 8),
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: controller,
-                  builder: (context, draft, child) => ElevatedButton(
-                    key: const Key('send-composed-text'),
-                    onPressed: draft.text.isEmpty
-                        ? null
-                        : () {
-                            final text = controller.text;
-                            if (text.isEmpty || !onSend(text)) return;
-                            controller.clear();
-                            Navigator.of(context).pop();
-                          },
-                    child: const Text('전송'),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('취소'),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: controller,
+                    builder: (context, draft, child) => ElevatedButton(
+                      key: const Key('send-composed-text'),
+                      onPressed: draft.text.isEmpty
+                          ? null
+                          : () {
+                              final text = controller.text;
+                              if (text.isEmpty || !onSend(text)) return;
+                              controller.clear();
+                              Navigator.of(context).pop();
+                            },
+                      child: const Text('전송'),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
