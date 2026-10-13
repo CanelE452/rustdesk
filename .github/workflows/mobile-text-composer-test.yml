@@ -1,15 +1,19 @@
-name: Android text composer widget test
+name: Personal RustDesk feature tests
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - feature/mobile-text-composer
+      - feature/personal-multiplatform
     paths:
       - '.github/workflows/mobile-text-composer-test.yml'
       - 'flutter/lib/mobile/pages/remote_page.dart'
       - 'flutter/lib/mobile/widgets/composed_text_sheet.dart'
+      - 'flutter/lib/desktop/pages/connection_page.dart'
+      - 'flutter/lib/desktop/utils/two_window_layout.dart'
+      - 'flutter/lib/utils/multi_window_manager.dart'
       - 'flutter/test/composed_text_sheet_test.dart'
+      - 'flutter/test/two_window_layout_test.dart'
 
 permissions:
   contents: read
@@ -27,12 +31,12 @@ jobs:
       - name: Flutter dependencies
         working-directory: flutter
         run: flutter pub get
-      - name: Compose sheet widget tests
+      - name: Widget and window layout tests
         working-directory: flutter
-        run: flutter test test/composed_text_sheet_test.dart
-      - name: Dart syntax check for remote page
+        run: flutter test test/composed_text_sheet_test.dart test/two_window_layout_test.dart
+      - name: Dart syntax validation
         working-directory: flutter
-        run: dart format --output=none lib/mobile/pages/remote_page.dart
-      - name: Analyze new widget, integration and tests
+        run: dart format --output=none lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart lib/desktop/pages/connection_page.dart lib/desktop/utils/two_window_layout.dart lib/utils/multi_window_manager.dart test/composed_text_sheet_test.dart test/two_window_layout_test.dart
+      - name: Analyze modified sources and tests
         working-directory: flutter
-        run: flutter analyze --no-fatal-infos lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart test/composed_text_sheet_test.dart
+        run: flutter analyze --no-fatal-infos lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart lib/desktop/pages/connection_page.dart lib/desktop/utils/two_window_layout.dart lib/utils/multi_window_manager.dart test/composed_text_sheet_test.dart test/two_window_layout_test.dart
