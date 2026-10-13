@@ -456,7 +456,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           bind.sessionInputString(sessionId: sessionId, value: text);
           return true;
         },
-      ).whenComplete(() {
+      ),
+    ).whenComplete(() {
       if (mounted) _physicalFocusNode.requestFocus();
     });
   }
