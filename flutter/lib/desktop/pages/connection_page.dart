@@ -9,6 +9,8 @@ import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/desktop/utils/two_window_layout.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
@@ -215,6 +217,8 @@ class _ConnectionPageState extends State<ConnectionPage>
   Iterable<Peer> _autocompleteOpts = [];
 
   final _menuOpen = false.obs;
+  bool _arrangingRemoteWindows = false;
+  bool _updatingWindowPreference = false;
 
   @override
   void initState() {
@@ -314,7 +318,9 @@ class _ConnectionPageState extends State<ConnectionPage>
                 Flexible(child: _buildRemoteIDTextField(context)),
               ],
             ).marginOnly(top: 22),
-            SizedBox(height: 12),
+            SizedBox(height: 8),
+            _buildDualRemoteWindowControls(),
+            SizedBox(height: 8),
             Divider().paddingOnly(right: 12),
             Expanded(child: PeerTabPage()),
           ],
@@ -323,6 +329,90 @@ class _ConnectionPageState extends State<ConnectionPage>
         if (!isOutgoingOnly) OnlineStatusWidget()
       ],
     );
+  }
+
+  /// Uses upstream's independent remote-desktop windows rather than
+  /// duplicating video renderers or sharing a session between two peers.
+  Widget _buildDualRemoteWindowControls() {
+    final separateWindows = !mainGetLocalBoolOptionSync(
+      kOptionOpenNewConnInTabs,
+    );
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Wrap(
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 6,
+        children: [
+          Tooltip(
+            message: '켜면 다음 원격 연결부터 각각 새 창으로 열어',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('새 연결 별도 창', style: TextStyle(fontSize: 12)),
+                Switch(
+                  value: separateWindows,
+                  onChanged: _updatingWindowPreference
+                      ? null
+                      : (enabled) async {
+                          setState(() => _updatingWindowPreference = true);
+                          try {
+                            await mainSetLocalBoolOption(
+                              kOptionOpenNewConnInTabs, !enabled);
+                          } catch (e) {
+                            debugPrint('Failed to update desktop window mode: $e');
+                            showToast('새 창 설정을 저장하지 못했어');
+                          } finally {
+                            if (mounted) {
+                              setState(
+                                  () => _updatingWindowPreference = false);
+                            }
+                          }
+                        },
+                ),
+              ],
+            ),
+          ),
+          TextButton.icon(
+            onPressed: _arrangingRemoteWindows ? null : _tileRemoteWindows,
+            icon: const Icon(Icons.view_column, size: 17),
+            label: const Text('원격 화면 2개 나란히'),
+          ),
+        ],
+      ),
+    ).paddingOnly(right: 12);
+  }
+
+  Future<void> _tileRemoteWindows() async {
+    if (_arrangingRemoteWindows) return;
+    setState(() => _arrangingRemoteWindows = true);
+    TwoRemoteWindowTileResult result;
+    try {
+      result = await RustDeskMultiWindowManager.instance
+          .tileTwoRemoteDesktopWindows();
+    } catch (e) {
+      debugPrint('Failed to tile desktop connections: $e');
+      result = TwoRemoteWindowTileResult.failed;
+    }
+    if (!mounted) return;
+    setState(() => _arrangingRemoteWindows = false);
+    switch (result) {
+      case TwoRemoteWindowTileResult.arranged:
+        showToast('원격 창 2개의 좌우 배치를 요청했어');
+        break;
+      case TwoRemoteWindowTileResult.fewerThanTwoWindows:
+        showToast('원격 연결 2개를 각각 새 창에 열어야 해. 새 연결 별도 창을 켜고 접속해줘');
+        break;
+      case TwoRemoteWindowTileResult.noScreen:
+        showToast('화면 정보를 확인할 수 없어');
+        break;
+      case TwoRemoteWindowTileResult.screenTooSmall:
+        showToast('이 모니터는 두 개의 원격 창을 배치하기에 너무 좁아');
+        break;
+      case TwoRemoteWindowTileResult.failed:
+        showToast('원격 창 배치에 실패했어. 창이 최대화되어 있는지 확인해줘');
+        break;
+    }
   }
 
   /// Callback for the connect button.
