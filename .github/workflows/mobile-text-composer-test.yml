@@ -2,6 +2,14 @@ name: Android text composer widget test
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/mobile-text-composer
+    paths:
+      - '.github/workflows/mobile-text-composer-test.yml'
+      - 'flutter/lib/mobile/pages/remote_page.dart'
+      - 'flutter/lib/mobile/widgets/composed_text_sheet.dart'
+      - 'flutter/test/composed_text_sheet_test.dart'
 
 permissions:
   contents: read
