@@ -83,6 +83,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
+  // Local draft: composing text must never be forwarded on every IME update.
+  final TextEditingController _composedTextController = TextEditingController();
 
   _RemotePageState(String id) {
     initSharedStates(id);
@@ -158,6 +160,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.imageModel.disposeImage();
     gFFI.cursorModel.disposeImages();
     await gFFI.invokeMethod("enable_soft_keyboard", true);
+    _composedTextController.dispose();
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();
     clearWaylandKeyboardPromptSuppressedForConnection(sessionId.toString());
@@ -394,6 +397,120 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     inputModel.inputKey(char);
   }
 
+  // Compose text locally on the phone, then send one complete string to the
+  // selected Windows/Linux peer. This avoids forwarding intermediate Korean
+  // IME composition events or transliterated key strokes.
+  void openTextComposer() {
+    if (!mounted ||
+        !gFFI.ffiModel.pi.isSet.value ||
+        gFFI.ffiModel.viewOnly ||
+        !gFFI.ffiModel.keyboard) {
+      return;
+    }
+
+    // Reuse RustDesk's explicit Wayland keyboard consent gate. Sending a
+    // complete string may use clipboard-assisted input at the remote end.
+    final allowWaylandKeyboard =
+        mainGetPeerBoolOptionSync(widget.id, kPeerOptionAllowWaylandKeyboard);
+    if (shouldShowWaylandKeyboardPrompt(
+      connectionId: sessionId.toString(),
+      isWaylandPeer: _shouldGateKeyboardForWayland(),
+      allowWaylandKeyboardRemembered: allowWaylandKeyboard,
+    )) {
+      inputModel.keyboardInputAllowed = false;
+      showWaylandKeyboardInputWarningDialog(
+        id: widget.id,
+        connectionId: sessionId.toString(),
+        ffi: gFFI,
+        // The existing consent dialog enables keyboard input after callback.
+        // Tap the compose button again after granting permission.
+        onEnable: () async {},
+      );
+      return;
+    }
+    if (!inputModel.keyboardInputAllowed) return;
+
+    // Hide the original immediate-forwarding keyboard before opening the
+    // draft editor. The remote application's focus stays unchanged.
+    setState(() => _showEdit = false);
+    _mobileFocusNode.unfocus();
+    gFFI.invokeMethod("enable_soft_keyboard", true);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('문장을 완성한 뒤 전송'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _composedTextController,
+                autofocus: true,
+                minLines: 1,
+                maxLines: 5,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: '한글, 영문, 기호를 입력해',
+                ),
+                // Intentionally no onChanged/onSubmitted callback.
+                // Android IME pre-edit changes remain entirely local.
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    child: const Text('취소'),
+                  ),
+                  const SizedBox(width: 8),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _composedTextController,
+                    builder: (context, draft, child) => ElevatedButton(
+                      onPressed: draft.text.isEmpty
+                          ? null
+                          : () {
+                              // A stale sheet must never send to a closed,
+                              // view-only or keyboard-blocked session.
+                              if (!mounted ||
+                                  !gFFI.ffiModel.pi.isSet.value ||
+                                  gFFI.ffiModel.viewOnly ||
+                                  !gFFI.ffiModel.keyboard ||
+                                  !inputModel.keyboardInputAllowed) {
+                                return;
+                              }
+                              bind.sessionInputString(
+                                sessionId: sessionId,
+                                value: _composedTextController.text,
+                              );
+                              _composedTextController.clear();
+                              Navigator.of(sheetContext).pop();
+                            },
+                      child: const Text('전송'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(() {
+      if (mounted) _physicalFocusNode.requestFocus();
+    });
+  }
+
   void openKeyboard() {
     final allowWaylandKeyboard =
         mainGetPeerBoolOptionSync(widget.id, kPeerOptionAllowWaylandKeyboard);
@@ -601,6 +718,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                   color: Colors.white,
                                   icon: Icon(Icons.keyboard),
                                   onPressed: openKeyboard),
+                              IconButton(
+                                color: Colors.white,
+                                icon: const Icon(Icons.edit_note),
+                                tooltip: '문장 작성 후 전송',
+                                onPressed: openTextComposer,
+                              ),
                               IconButton(
                                 color: Colors.white,
                                 icon: Icon(gFFI.ffiModel.touchMode
