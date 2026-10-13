@@ -63,6 +63,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Timer? _timer;
   bool _showBar = !isWebDesktop;
   bool _showGestureHelp = false;
+  bool _isComposingText = false;
   String _value = '';
   Orientation? _currentOrientation;
   final _uniqueKey = UniqueKey();
@@ -269,11 +270,18 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       _iosKeyboardWorkaroundTimer?.cancel();
       _iosKeyboardWorkaroundTimer = null;
       _timer?.cancel();
-      _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
+      if (_isComposingText) {
+        // Do not steal focus from the local Korean IME draft editor.
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
             overlays: SystemUiOverlay.values);
-        _mobileFocusNode.requestFocus();
-      });
+      } else {
+        _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
+          if (!mounted || _isComposingText) return;
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+              overlays: SystemUiOverlay.values);
+          _mobileFocusNode.requestFocus();
+        });
+      }
     }
     // update for Scaffold
     setState(() {});
@@ -433,7 +441,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
     // Hide the original immediate-forwarding keyboard before opening the
     // draft editor. The remote application's focus stays unchanged.
-    setState(() => _showEdit = false);
+    _timer?.cancel();
+    setState(() {
+      _showEdit = false;
+      _isComposingText = true;
+    });
     _mobileFocusNode.unfocus();
     gFFI.invokeMethod("enable_soft_keyboard", true);
 
@@ -458,7 +470,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         },
       ),
     ).whenComplete(() {
-      if (mounted) _physicalFocusNode.requestFocus();
+      if (!mounted) return;
+      setState(() => _isComposingText = false);
+      _physicalFocusNode.requestFocus();
     });
   }
 
