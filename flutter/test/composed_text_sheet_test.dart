@@ -78,6 +78,7 @@ void main() {
 
     await tester.enterText(
         find.byKey(const Key('composed-text-field')), '연결 해제 시 보존');
+    await tester.pump(); // Wait for ValueListenableBuilder to enable Send.
     await tester.tap(find.byKey(const Key('send-composed-text')));
     await tester.pumpAndSettle();
 
