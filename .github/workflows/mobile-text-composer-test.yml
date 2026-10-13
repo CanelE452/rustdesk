@@ -1,0 +1,27 @@
+name: Android text composer widget test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.24.5'
+      - name: Flutter dependencies
+        working-directory: flutter
+        run: flutter pub get
+      - name: Compose sheet widget tests
+        working-directory: flutter
+        run: flutter test test/composed_text_sheet_test.dart
+      - name: Analyze new widget and tests
+        working-directory: flutter
+        run: flutter analyze lib/mobile/widgets/composed_text_sheet.dart test/composed_text_sheet_test.dart
