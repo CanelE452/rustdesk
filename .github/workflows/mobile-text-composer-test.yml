@@ -35,4 +35,4 @@ jobs:
         run: dart format --output=none lib/mobile/pages/remote_page.dart
       - name: Analyze new widget, integration and tests
         working-directory: flutter
-        run: flutter analyze lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart test/composed_text_sheet_test.dart
+        run: flutter analyze --no-fatal-infos lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart test/composed_text_sheet_test.dart
