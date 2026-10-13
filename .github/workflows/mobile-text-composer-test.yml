@@ -30,6 +30,9 @@ jobs:
       - name: Compose sheet widget tests
         working-directory: flutter
         run: flutter test test/composed_text_sheet_test.dart
-      - name: Analyze new widget and tests
+      - name: Dart syntax check for remote page
         working-directory: flutter
-        run: flutter analyze lib/mobile/widgets/composed_text_sheet.dart test/composed_text_sheet_test.dart
+        run: dart format --output=none lib/mobile/pages/remote_page.dart
+      - name: Analyze new widget, integration and tests
+        working-directory: flutter
+        run: flutter analyze lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart test/composed_text_sheet_test.dart
