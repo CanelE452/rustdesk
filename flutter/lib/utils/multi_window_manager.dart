@@ -8,6 +8,8 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/input_model.dart';
+import 'package:flutter_hbb/desktop/utils/two_window_layout.dart';
+import 'package:window_size/window_size.dart' as window_size;
 
 /// must keep the order
 // ignore: constant_identifier_names
@@ -65,6 +67,93 @@ class RustDeskMultiWindowManager {
   final List<int> _viewCameraWindows = List.empty(growable: true);
   final List<int> _portForwardWindows = List.empty(growable: true);
   final List<int> _terminalWindows = List.empty(growable: true);
+
+  bool _tilingRemoteWindows = false;
+
+  /// Arrange the two most recently opened *active* remote-desktop windows
+  /// on the monitor containing the older window. This is a desktop main-window
+  /// action: it never changes remote sessions or their input destinations.
+  Future<TwoRemoteWindowTileResult> tileTwoRemoteDesktopWindows() async {
+    if (_tilingRemoteWindows) return TwoRemoteWindowTileResult.failed;
+    _tilingRemoteWindows = true;
+
+    final controllers = <WindowController>[];
+    final oldFrames = <Rect>[];
+    var changesStarted = false;
+    try {
+      final candidates = <int>[];
+      for (final windowId in _remoteDesktopWindows.reversed) {
+        if (!_activeWindows.contains(windowId)) continue;
+
+        // A cached/empty window must not be mistaken for an active session.
+        try {
+          final peerList = await DesktopMultiWindow.invokeMethod(
+              windowId, kWindowEventGetRemoteList, '');
+          if (peerList is String && peerList.trim().isNotEmpty) {
+            candidates.add(windowId);
+          }
+        } catch (e) {
+          debugPrint('Skipping remote window $windowId: $e');
+        }
+      }
+      if (candidates.length < 2) {
+        return TwoRemoteWindowTileResult.fewerThanTwoWindows;
+      }
+
+      // Most recent two, displayed oldest-left / newest-right.
+      final windowIds = candidates.take(2).toList().reversed.toList();
+      for (final id in windowIds) {
+        controllers.add(WindowController.fromWindowId(id));
+      }
+      final screens = await window_size.getScreenList();
+      if (screens.isEmpty) return TwoRemoteWindowTileResult.noScreen;
+
+      // Read all original geometry before changing either window, to allow
+      // recovery if one of the platform window calls fails.
+      for (final controller in controllers) {
+        oldFrames.add(await controller.getFrame());
+      }
+      var targetScreen = screens.first;
+      for (final screen in screens) {
+        if (screen.visibleFrame.contains(oldFrames.first.center)) {
+          targetScreen = screen;
+          break;
+        }
+      }
+
+      final frames = twoWindowSideBySideFrames(targetScreen.visibleFrame);
+      if (frames == null) {
+        return TwoRemoteWindowTileResult.screenTooSmall;
+      }
+
+      changesStarted = true;
+      for (final controller in controllers) {
+        await controller.setFullscreen(false);
+      }
+      for (var i = 0; i < controllers.length; i++) {
+        await controllers[i].setFrame(frames[i]);
+      }
+      for (final controller in controllers) {
+        await controller.show();
+      }
+      return TwoRemoteWindowTileResult.arranged;
+    } catch (e) {
+      debugPrint('Failed to arrange remote windows side by side: $e');
+      if (changesStarted) {
+        for (var i = 0; i < oldFrames.length && i < controllers.length; i++) {
+          try {
+            await controllers[i].setFrame(oldFrames[i]);
+          } catch (restoreError) {
+            debugPrint('Failed to restore remote window frame: $restoreError');
+          }
+        }
+      }
+      return TwoRemoteWindowTileResult.failed;
+    } finally {
+      _tilingRemoteWindows = false;
+    }
+  }
+
 
   moveTabToNewWindow(int windowId, String peerId, String sessionId,
       WindowType windowType) async {
