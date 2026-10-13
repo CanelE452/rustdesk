@@ -8,6 +8,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
+import 'package:flutter_hbb/mobile/widgets/composed_text_sheet.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import 'package:flutter_svg/svg.dart';
@@ -440,73 +441,22 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('문장을 완성한 뒤 전송'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _composedTextController,
-                autofocus: true,
-                minLines: 1,
-                maxLines: 5,
-                keyboardType: TextInputType.multiline,
-                textInputAction: TextInputAction.newline,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: '한글, 영문, 기호를 입력해',
-                ),
-                // Intentionally no onChanged/onSubmitted callback.
-                // Android IME pre-edit changes remain entirely local.
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                    child: const Text('취소'),
-                  ),
-                  const SizedBox(width: 8),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _composedTextController,
-                    builder: (context, draft, child) => ElevatedButton(
-                      onPressed: draft.text.isEmpty
-                          ? null
-                          : () {
-                              // A stale sheet must never send to a closed,
-                              // view-only or keyboard-blocked session.
-                              if (!mounted ||
-                                  !gFFI.ffiModel.pi.isSet.value ||
-                                  gFFI.ffiModel.viewOnly ||
-                                  !gFFI.ffiModel.keyboard ||
-                                  !inputModel.keyboardInputAllowed) {
-                                return;
-                              }
-                              bind.sessionInputString(
-                                sessionId: sessionId,
-                                value: _composedTextController.text,
-                              );
-                              _composedTextController.clear();
-                              Navigator.of(sheetContext).pop();
-                            },
-                      child: const Text('전송'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    ).whenComplete(() {
+      builder: (sheetContext) => ComposedTextSheet(
+        controller: _composedTextController,
+        onSend: (text) {
+          // A stale sheet must never send to a closed, view-only or
+          // keyboard-blocked session. Returning false preserves the draft.
+          if (!mounted ||
+              !gFFI.ffiModel.pi.isSet.value ||
+              gFFI.ffiModel.viewOnly ||
+              !gFFI.ffiModel.keyboard ||
+              !inputModel.keyboardInputAllowed) {
+            return false;
+          }
+          bind.sessionInputString(sessionId: sessionId, value: text);
+          return true;
+        },
+      ).whenComplete(() {
       if (mounted) _physicalFocusNode.requestFocus();
     });
   }
