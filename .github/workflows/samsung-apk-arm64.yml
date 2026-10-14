@@ -1,6 +1,7 @@
 name: Build Android personal client for phone and tablet (ARM64)
 
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     branches:
@@ -47,9 +48,10 @@ jobs:
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-      - name: Checkout RustDesk fork including submodules
+      - name: Checkout personal Android phone/tablet source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          ref: fix/android-viewer-least-privilege
           submodules: recursive
           persist-credentials: false
 
@@ -260,7 +262,7 @@ jobs:
           fi
           gh release create "$tag" RustDesk-Personal-Android-arm64.apk apk.sha256 \
             --repo "$GH_REPO" \
-            --target "$GITHUB_SHA" \
+            --target "$(git rev-parse HEAD)" \
             --title 'RustDesk Personal Android ARM64 — phone and tablet (test build)' \
             --notes 'Outgoing remote-control client for both Android phones and tablets, with optional Samsung keyboard-cover input, Windows/Ubuntu targets. Removed Android incoming control/accessibility/screen capture/microphone services. Separate package ID com.carriez.flutter_hbb.personal.client. Google Play Protect results still depend on device policy. Debug-signed; future rebuilding may require uninstall before upgrade. Test real hardware before trusting for sensitive use.' \
             --prerelease
