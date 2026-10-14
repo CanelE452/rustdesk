@@ -39,9 +39,12 @@ jobs:
           test -n "$SDK_MANAGER"
           yes | "$SDK_MANAGER" --licenses > /dev/null || true
           "$SDK_MANAGER" 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
       - name: Install Flutter dependencies
         working-directory: flutter
         run: flutter pub get
       - name: Compile Android Kotlin without APK packaging
         working-directory: flutter/android
-        run: ./gradlew :app:compileDebugKotlin --no-daemon --stacktrace
+        run: gradle :app:compileDebugKotlin --no-daemon --stacktrace
