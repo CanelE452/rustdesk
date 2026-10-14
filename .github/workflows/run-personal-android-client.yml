@@ -1,0 +1,24 @@
+name: Build Android personal client for phone and tablet
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/run-personal-android-client.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: personal-android-phone-tablet-client
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: CanelE452/rustdesk/.github/workflows/samsung-apk-arm64.yml@fix/android-viewer-least-privilege
+    permissions:
+      contents: write
+      actions: read
