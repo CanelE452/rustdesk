@@ -1,0 +1,62 @@
+name: Publish personal Android APK release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/samsung-hardware-input
+    paths:
+      - '.github/workflows/publish-personal-android-release.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: personal-android-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish validated Samsung ARM64 APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Obtain verified Android build artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh run download 38503607561 --repo "$GH_REPO" --name RustDesk-Personal-Samsung-arm64 --dir dist
+          echo 'Files inside verified artifact:'
+          find dist -maxdepth 3 -type f -print
+          apk_path="$(find dist -type f -name '*.apk' -print -quit)"
+          if [ -z "$apk_path" ] || [ ! -s "$apk_path" ]; then
+            echo 'Missing usable Android APK in downloaded artifact' >&2
+            exit 1
+          fi
+          if [ "$apk_path" != 'dist/RustDesk-Personal-Samsung-arm64.apk' ]; then
+            mv "$apk_path" 'dist/RustDesk-Personal-Samsung-arm64.apk'
+          fi
+          sha256sum dist/RustDesk-Personal-Samsung-arm64.apk | tee dist/SHA256SUMS.txt
+      - name: Publish GitHub Release with direct APK link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="personal-android-v0.1.0"
+          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo 'Release already exists; keeping its existing files'
+          else
+            gh release create "$tag" \
+              --repo "$GH_REPO" \
+              --target a4b3f3d013248090ba95e782f82fbc5a29df4cd4 \
+              --title "RustDesk Personal – Samsung Android ARM64 (test build)" \
+              --notes "Personal RustDesk fork build for Samsung Android tablets. Built and signed in GitHub Actions run 38503607561. Contains composed-text sending and experimental keyboard-cover/trackpad handling. Physical Samsung keyboard and touchpad behavior still requires on-device validation. Windows and Ubuntu personalized installers are not part of this release." \
+              --prerelease
+            gh release upload "$tag" dist/RustDesk-Personal-Samsung-arm64.apk dist/SHA256SUMS.txt --repo "$GH_REPO"
+          fi
+          gh release view "$tag" --repo "$GH_REPO" --json url,assets
