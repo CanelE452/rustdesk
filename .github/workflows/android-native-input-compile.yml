@@ -1,0 +1,41 @@
+name: Android native keyboard-cover compile
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/android-samsung-input
+    paths:
+      - '.github/workflows/android-native-input-compile.yml'
+      - 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt'
+      - 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/PersonalRemoteInput.kt'
+
+permissions:
+  contents: read
+
+jobs:
+  compile-kotlin:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.24.5'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK platform
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Install Flutter dependencies
+        working-directory: flutter
+        run: flutter pub get
+      - name: Compile Android Kotlin without APK packaging
+        working-directory: flutter/android
+        run: ./gradlew :app:compileDebugKotlin --no-daemon --stacktrace
