@@ -20,6 +20,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.WindowManager
+import android.view.KeyEvent
 import android.media.MediaCodecInfo
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
@@ -51,6 +52,7 @@ class MainActivity : FlutterActivity() {
             get() = _rdClipboardManager;
     }
 
+    private var personalRemoteInput: PersonalRemoteInput? = null
     private val channelTag = "mChannel"
     private val logTag = "mMainActivity"
     private var mainService: MainService? = null
@@ -87,6 +89,7 @@ class MainActivity : FlutterActivity() {
             channelTag
         )
         initFlutterChannel(flutterMethodChannel!!)
+        personalRemoteInput = PersonalRemoteInput(this, flutterEngine.dartExecutor.binaryMessenger)
         thread {
             try {
                 setCodecInfo()
@@ -94,6 +97,25 @@ class MainActivity : FlutterActivity() {
                 Log.e("MainActivity", "Failed to setCodecInfo: ${e.message}", e)
             }
         }
+    }
+
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (personalRemoteInput?.dispatchKeyEvent(event) == true) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        personalRemoteInput?.onWindowFocusChanged(hasFocus)
+    }
+
+    override fun onPause() {
+        // Capture must not survive leaving the remote-control activity.
+        personalRemoteInput?.disable()
+        super.onPause()
     }
 
     override fun onResume() {
@@ -232,6 +254,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        personalRemoteInput?.dispose()
+        personalRemoteInput = null
         Log.e(logTag, "onDestroy")
         // The process can outlive the UI whenever something keeps it alive:
         // MainService, or the accessibility InputService on its own. Only the
