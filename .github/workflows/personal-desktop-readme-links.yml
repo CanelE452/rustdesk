@@ -1,0 +1,78 @@
+name: Update personal desktop download links
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-readme:
+    if: github.event.release.tag_name == 'personal-desktop-v0.1.0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TAG: personal-desktop-v0.1.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Confirm all personal desktop release assets exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' > /tmp/release-assets.txt
+          for asset in RustDesk-Personal-Windows-x64.exe RustDesk-Personal-Windows-x64.msi RustDesk-Personal-Ubuntu-amd64.deb SHA256SUMS.txt; do
+            grep -Fqx "$asset" /tmp/release-assets.txt
+          done
+      - name: Update only verified personal installer links
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin master feature/samsung-hardware-input feature/personal-desktop-installers
+          for target in master feature/samsung-hardware-input feature/personal-desktop-installers; do
+            git checkout -B "$target" "origin/$target"
+            python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('README.md')
+          s = p.read_text(encoding='utf-8')
+          old = ("**Windows x64 — 개인 수정본 준비 중** |\\n"
+                 "**Ubuntu x64 — 개인 수정본 준비 중**")
+          new = ("[**Windows x64 — 개인 수정본 EXE**]"
+                 "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.exe) |\\n"
+                 "[**Windows x64 — 개인 수정본 MSI**]"
+                 "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.msi) |\\n"
+                 "[**Ubuntu x64 — 개인 수정본 DEB**]"
+                 "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Ubuntu-amd64.deb)")
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif new not in s:
+              raise SystemExit('Expected personal download link anchors missing; refusing modification')
+
+          old_note = ("- **개인 수정본 Windows/Ubuntu 설치 파일은 아직 배포되지 않았어.** "
+                      "Android 수정본만 현재 다운로드 가능해. "
+                      "Windows/Ubuntu에 있는 공식 RustDesk를 원격 접속 대상으로 사용할 수 있지만, "
+                      "그 공식 프로그램에는 개인 수정 기능이 포함되지 않아.")
+          new_note = ("- [Windows/Ubuntu 개인 수정본 릴리스]"
+                      "(https://github.com/CanelE452/rustdesk/releases/tag/personal-desktop-v0.1.0) · "
+                      "[SHA-256 체크섬]"
+                      "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/SHA256SUMS.txt)\\n"
+                      "- Windows EXE/MSI는 신뢰된 게시자의 코드 서명이 없는 시험용 파일이야. "
+                      "Ubuntu DEB는 기존 RustDesk 패키지와 충돌하거나 대체할 수 있어. "
+                      "각 운영체제에서 원격 제어를 직접 검증한 것은 아니야.")
+          if old_note in s:
+              s = s.replace(old_note, new_note, 1)
+          elif new_note not in s:
+              raise SystemExit('Expected pending-release note missing; refusing modification')
+          p.write_text(s, encoding='utf-8')
+          PY
+            if ! git diff --quiet -- README.md; then
+              git add README.md
+              git commit -m 'docs(readme): link verified personal Windows and Ubuntu installers'
+              git push origin "HEAD:refs/heads/$target"
+            fi
+          done
