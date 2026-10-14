@@ -14,12 +14,14 @@
 **Personal build (this fork / 이 저장소의 수정본)**
 
 [**Android · Samsung ARM64 — APK 다운로드**](https://github.com/CanelE452/rustdesk/releases/download/personal-android-v0.1.0/RustDesk-Personal-Samsung-arm64.apk) |
-**Windows x64 — 개인 수정본 준비 중** |
-**Ubuntu x64 — 개인 수정본 준비 중**
+[**Windows x64 — 개인 수정본 EXE**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.exe) |
+[**Windows x64 — 개인 수정본 MSI**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.msi) |
+[**Ubuntu x64 — 개인 수정본 DEB**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Ubuntu-amd64.deb)
 
 - [Android 릴리스 / Android release notes](https://github.com/CanelE452/rustdesk/releases/tag/personal-android-v0.1.0) · [SHA-256 체크섬](https://github.com/CanelE452/rustdesk/releases/download/personal-android-v0.1.0/SHA256SUMS.txt)
 - The personal Android APK is a test build with Korean composed-text input and experimental Samsung keyboard-cover/trackpad support. Real Samsung hardware behavior has not been verified.
-- **개인 수정본 Windows/Ubuntu 설치 파일은 아직 배포되지 않았어.** Android 수정본만 현재 다운로드 가능해. Windows/Ubuntu에 있는 공식 RustDesk를 원격 접속 대상으로 사용할 수 있지만, 그 공식 프로그램에는 개인 수정 기능이 포함되지 않아.
+- [Windows·Ubuntu 개인 수정본 릴리스](https://github.com/CanelE452/rustdesk/releases/tag/personal-desktop-v0.1.0) · [SHA-256 체크섬](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/SHA256SUMS.txt)
+- **Windows EXE·MSI는 공인 코드 서명이 없는 시험용 파일**이야. Ubuntu DEB는 기존 RustDesk 패키지와 충돌하거나 이를 대체할 수 있으니 설치 전에 설정을 백업해. Windows·Ubuntu 실기 원격 제어 및 다중 창 동작은 아직 검증하지 않았어.
 
 **Official RustDesk downloads (unmodified / 공식 원본 프로그램)**
 
