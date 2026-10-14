@@ -1,0 +1,43 @@
+name: Samsung hardware Android Kotlin compile
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/samsung-hardware-input]
+    paths:
+      - '.github/workflows/android-hardware-native-check.yml'
+      - 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RemoteHardwareInput.kt'
+      - 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt'
+
+permissions:
+  contents: read
+
+jobs:
+  kotlin-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.24.5'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Flutter dependencies
+        working-directory: flutter
+        run: flutter pub get
+      - name: Set native build paths
+        run: |
+          echo "flutter.sdk=$(dirname $(dirname $(which flutter)))" > flutter/android/local.properties
+          echo "sdk.dir=$ANDROID_HOME" >> flutter/android/local.properties
+      - name: Compile Android Kotlin
+        working-directory: flutter/android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:compileDebugKotlin --no-daemon --stacktrace
