@@ -124,3 +124,73 @@ do not establish full Ubuntu Wayland support.
 - Native Windows/Ubuntu builds and real-device input/display tests pending.
 - Android simultaneous multi-session tabs remain a separate unimplemented
   architecture task; desktop windows do not solve mobile FFI isolation.
+
+
+## Samsung keyboard cover and trackpad mode (Android -> Windows/Ubuntu)
+
+STATUS: source implementation and Flutter unit tests complete; actual Samsung
+device behavior, native Android Kotlin compilation and full APK installation
+must be verified separately. No root, no Accessibility Service permission
+escalation, no global keylogger.
+
+### Usage with a newly built APK
+
+1. From Android RustDesk, connect to a Windows or Ubuntu desktop.
+2. Open the remote toolbar and tap the keyboard/mouse icon labeled
+   "태블릿 원격 마우스·기능키 모드 켜기".
+3. Android requests pointer capture. The tablet cursor may disappear while
+   the remote computer receives mouse movement, click, drag and scroll.
+4. The in-session overlay displays mouse event count, F-key event count and
+   the last function key observed by Android. Press Fn+F11 in a browser to test.
+5. Tap the same icon by touch to release capture. App focus loss, background
+   or leaving the remote page also releases the capture.
+
+The normal remote keyboard and text composer remain available.
+Opening either text entry mode releases pointer capture.
+
+### What was changed
+
+- Native Android controller: RemoteHardwareInput.kt. Registers a separate
+  MethodChannel, requests/relinquishes pointer capture, sends only captured
+  mouse/touchpad events and F1-F12 hardware key events to Flutter.
+- MainActivity.kt: installs/removes native controller and intercepts function
+  keys **only** while the user enables remote hardware mode. All other keys
+  use the ordinary Android/Flutter dispatch path.
+- RemotePage: maps captured relative cursor motion to the selected RustDesk
+  canvas through existing input code; forwards left/right/middle mouse buttons,
+  fractional wheel movements and F1-F12. Releases pressed buttons on exit.
+- hardware_input_protocol.dart: state isolation and clamped coordinates.
+- hardware_input_protocol_test.dart: geometry, button transitions, scrolling,
+  and F-key index acceptance.
+
+### Hard limitations
+
+Android, Samsung One UI and the physical keyboard firmware may consume
+HOME/system keys before dispatch to MainActivity. Fn is a firmware modifier and
+may never be delivered as its own key. If Fn+F11 produces **no F-key event**
+in the overlay, native RustDesk cannot simply force a hardware F11 through.
+The existing on-screen F1-F12 buttons are an alternative.
+
+Android pointer capture is documented from API 26, but older Samsung
+touchpads may not emit normal relative mouse events in captured mode.
+A "capture requested" response does not prove actual movement/scroll events.
+No device/model-specific support is asserted without testing.
+
+### Real-device validation gates
+
+| Action | Required observation |
+|---|---|
+| Fn+F11 on Samsung keyboard | Overlay increases F-key count; Chrome/Edge remote fullscreen toggles |
+| Plain F1 triggers Samsung HOME | Verify whether Android keeps it in system (cannot intercept) |
+| Move touchpad while enabled | Android cursor is captured and Windows/Ubuntu remote cursor moves |
+| Left/right click, drag | Correct remote buttons; no stuck button after disconnect |
+| Two-finger scroll | Remote page scrolls with correct direction |
+| Normal tablet touch | Can disable capture without attaching another mouse |
+| Exit/back/background | Pointer capture releases immediately; no remote keys/buttons remain held |
+| Windows and Ubuntu | Repeat separately; ensure no cross-peer input |
+| Text composer and F1-F12 on-screen | Both previous input pathways remain functional |
+
+Failure classifications: no captured events => Android/OEM input routing;
+events present but no remote motion => RustDesk canvas mapping/injection;
+F-key overlay count rises but remote browser ignores => peer key injection or
+focus mapping; no count => hardware/OS filtered before RustDesk.
