@@ -38,7 +38,7 @@ jobs:
         run: flutter pub get
       - name: Widget and window layout tests
         working-directory: flutter
-        run: flutter test test/composed_text_sheet_test.dart test/two_window_layout_test.dart test/hardware_input_protocol_test.dart test/hardware_input_protocol_test.dart
+        run: flutter test test/composed_text_sheet_test.dart test/two_window_layout_test.dart test/hardware_input_protocol_test.dart
       - name: Dart syntax validation
         working-directory: flutter
         run: dart format --output=none lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart lib/mobile/hardware_input_protocol.dart lib/desktop/pages/connection_page.dart lib/desktop/utils/two_window_layout.dart lib/utils/multi_window_manager.dart test/composed_text_sheet_test.dart test/two_window_layout_test.dart test/hardware_input_protocol_test.dart
