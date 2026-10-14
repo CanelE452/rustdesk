@@ -124,3 +124,66 @@ do not establish full Ubuntu Wayland support.
 - Native Windows/Ubuntu builds and real-device input/display tests pending.
 - Android simultaneous multi-session tabs remain a separate unimplemented
   architecture task; desktop windows do not solve mobile FFI isolation.
+
+
+## Samsung tablet keyboard-cover input (Android controller)
+
+Implemented in feature/android-samsung-input as an **opt-in experimental mode**.
+This change affects the Android controller only; Windows and Ubuntu are remote
+targets and do not need new protocol changes.
+
+### Usage after installing a build
+
+1. Connect the tablet's RustDesk app to Windows or Ubuntu with control permission.
+2. In the remote bottom toolbar, tap the mouse icon to turn on
+   **원격 키보드·터치패드 모드**.
+3. The top overlay reports **원격 터치패드 연결됨** only after Android
+   confirms pointer capture. If it says **포인터 캡처 대기**, the native
+   request may not have been granted, so remote pointer control is unverified.
+4. Move the cover trackpad, click, and use two-finger scrolling. The Android
+   bridge converts recognized events to cursor positions, button presses and
+   wheel increments. Actual touchpad event semantics must be checked on-device.
+5. Press Fn+F11 with a remote browser selected. If Android sends KEYCODE_F11,
+   the native bridge forwards it to the remote computer and the diagnostic
+   overlay shows Android key code **141** (F1 is 131). If the tablet gives the
+   app no key event, the overlay cannot force that hardware event through.
+6. The overlay provides explicit F1-F12 buttons even when Samsung/Android
+   consume the hardware F-row. To exit, use the overlay X button or leave the
+   remote page. Focus loss and app pause automatically release capture.
+
+### System limitation
+
+Android reserves the HOME key and does not deliver KEYCODE_HOME to ordinary
+apps. If the cover's bare F1 triggers HOME, this RustDesk source change
+**cannot guarantee bare F1 is rerouted**. A keyboard firmware/Fn-layer or
+One UI keyboard setting may be needed. Native code intercepts only F1-F12
+when actual function-key events reach MainActivity; other keys remain on
+the existing Flutter input path. Neither the text typed nor passwords are
+logged by the diagnostic; only selected non-printing key codes are displayed.
+
+### Source changes
+
+- flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/PersonalRemoteInput.kt
+  provides EventChannel events and a MethodChannel toggle, captures pointer
+  input with Android View.requestPointerCapture(), forwards delivered F keys,
+  and stops capture when the app loses focus.
+- flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt
+  installs and tears down the bridge.
+- flutter/lib/mobile/models/personal_remote_input.dart implements typed event
+  parsing, bounded cursor mapping and fractional scroll accumulation.
+- flutter/lib/mobile/pages/remote_page.dart provides the control icon,
+  keyboard/trackpad overlay, capture status, and existing session forwarding.
+- flutter/test/personal_remote_input_test.dart tests parser and pure geometry.
+
+### Validation still required
+
+- Android native Kotlin compilation in GitHub Actions (separate workflow).
+- Install an Android APK on the specific Samsung tablet and repeat Fn+F11,
+  F1 alone, mouse move, click/drag, two-finger scroll, focus loss, and
+  reconnect; compare actual recorded numeric key events only.
+- Confirm the cursor location matches taps in both Windows and Ubuntu,
+  including display scaling and different resolutions.
+- Verify no inadvertent keystrokes in view-only or disconnected sessions.
+
+STATUS: Source code committed, Flutter checks are separate, Android runtime
+and hardware behavior **not yet proven**.
