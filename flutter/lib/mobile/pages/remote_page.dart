@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
 import 'package:flutter_hbb/mobile/widgets/composed_text_sheet.dart';
+import 'package:flutter_hbb/mobile/models/personal_remote_input.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import 'package:flutter_svg/svg.dart';
@@ -64,6 +66,16 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   bool _showBar = !isWebDesktop;
   bool _showGestureHelp = false;
   bool _isComposingText = false;
+  // Opt-in keyboard-cover support. The OS retains reserved shortcuts.
+  final _personalRemoteInput = PersonalRemoteInput();
+  final _remoteHardwareCursor = PersonalRemoteCursor();
+  final _remoteHardwareScroll = PersonalScrollAccumulator();
+  StreamSubscription<PersonalInputEvent>? _personalInputEvents;
+  bool _hardwareModeEnabled = false;
+  bool _hardwarePointerCaptured = false;
+  int? _lastPhysicalKeyCode;
+  int? _lastPhysicalScanCode;
+
   String _value = '';
   Orientation? _currentOrientation;
   final _uniqueKey = UniqueKey();
@@ -128,6 +140,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           isKeyboardVisible: keyboardVisibilityController.isVisible);
     });
     WidgetsBinding.instance.addObserver(this);
+    if (isAndroid) {
+      _personalInputEvents = _personalRemoteInput.events.listen(
+        _onPersonalHardwareEvent,
+        onError: (Object error) => debugPrint('Hardware input stream: $error'),
+      );
+    }
+
 
     inputModel.keyboardInputAllowed = true;
 
@@ -146,6 +165,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   Future<void> dispose() async {
+    if (isAndroid) {
+      _hardwareModeEnabled = false;
+      _hardwarePointerCaptured = false;
+      unawaited(_personalInputEvents?.cancel() ?? Future<void>.value());
+      unawaited(_personalRemoteInput.disable().catchError(
+          (Object error) => debugPrint('Disable hardware input: $error')));
+    }
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
     // after several awaits (canvas save, image update, the `enable_soft_keyboard`
@@ -187,6 +213,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       trySyncClipboard();
+    } else if (isAndroid && _hardwareModeEnabled) {
+      // An unfocused Android window must not keep keyboard/pointer capture.
+      unawaited(_personalRemoteInput.disable());
     }
   }
 
@@ -409,7 +438,190 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   // Compose text locally on the phone, then send one complete string to the
   // selected Windows/Linux peer. This avoids forwarding intermediate Korean
   // IME composition events or transliterated key strokes.
+  bool get _canForwardPersonalInput =>
+      mounted &&
+      gFFI.ffiModel.pi.isSet.isTrue &&
+      gFFI.ffiModel.keyboard &&
+      !gFFI.ffiModel.viewOnly &&
+      !gFFI.ffiModel.isPeerAndroid;
+
+  Future<void> _togglePersonalHardwareMode() async {
+    if (!isAndroid) return;
+    if (_hardwareModeEnabled) {
+      await _personalRemoteInput.disable();
+      return;
+    }
+    if (!_canForwardPersonalInput) {
+      showToast('원격 컴퓨터에 제어 권한으로 연결한 뒤 켜줘');
+      return;
+    }
+    _physicalFocusNode.requestFocus();
+    try {
+      final enabled = await _personalRemoteInput.enable();
+      if (!mounted) return;
+      if (!enabled) {
+        showToast('Android 포인터 캡처를 시작할 수 없어. 앱 포커스를 확인해줘');
+      } else {
+        setState(() => _hardwareModeEnabled = true);
+      }
+    } catch (e) {
+      debugPrint('Failed to enable personal hardware input: $e');
+      if (mounted) showToast('키보드·터치패드 모드를 시작하지 못했어');
+    }
+  }
+
+  void _onPersonalHardwareEvent(PersonalInputEvent event) {
+    if (!mounted || !isAndroid) return;
+    switch (event.type) {
+      case 'mode':
+        setState(() {
+          _hardwareModeEnabled = event.enabled;
+          if (!event.enabled) {
+            _hardwarePointerCaptured = false;
+            _remoteHardwareCursor.reset();
+            _remoteHardwareScroll.reset();
+          }
+        });
+        return;
+      case 'capture':
+        setState(() => _hardwarePointerCaptured = event.captured);
+        return;
+      case 'key_observed':
+        setState(() {
+          _lastPhysicalKeyCode = event.observedKeyCode;
+          _lastPhysicalScanCode = event.observedScanCode;
+        });
+        return;
+    }
+    if (!_hardwareModeEnabled || !_canForwardPersonalInput) return;
+    if (event.type == 'function') {
+      final number = event.functionNumber;
+      if (number != null) {
+        inputModel.inputKey('VK_F' + number.toString());
+        setState(() {
+          _lastPhysicalKeyCode = 130 + number; // Android KEYCODE_F1 = 131.
+          _lastPhysicalScanCode = null;
+        });
+      }
+    } else if (_hardwarePointerCaptured && event.type == 'move') {
+      final pos = _remoteHardwareCursor.move(
+        event.dx,
+        event.dy,
+        gFFI.canvasModel.size,
+      );
+      if (pos != null) {
+        inputModel.handleMouse(
+          InputModel.getMouseEventMove(),
+          pos,
+          moveCanvas: false,
+        );
+      }
+    } else if (_hardwarePointerCaptured && event.type == 'button') {
+      final button = switch (event.button) {
+        'left' => MouseButtons.left,
+        'right' => MouseButtons.right,
+        'wheel' => MouseButtons.wheel,
+        _ => null,
+      };
+      if (button != null && event.buttonDown != null) {
+        unawaited(inputModel.sendMouse(
+            event.buttonDown! ? 'down' : 'up', button));
+      }
+    } else if (_hardwarePointerCaptured && event.type == 'scroll') {
+      final (x, y) = _remoteHardwareScroll.add(event.dx, event.dy);
+      if (x != 0 || y != 0) {
+        bind.sessionSendMouse(
+          sessionId: sessionId,
+          msg: jsonEncode(inputModel.modify({
+            'type': 'wheel',
+            'x': x.toString(),
+            'y': y.toString(),
+          })),
+        );
+      }
+    }
+  }
+
+  Widget _personalHardwareOverlay() {
+    return Positioned(
+      left: 8,
+      right: 8,
+      top: 6,
+      child: Material(
+        elevation: 4,
+        borderRadius: BorderRadius.circular(8),
+        color: Theme.of(context).colorScheme.surface,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    _hardwarePointerCaptured ? Icons.mouse : Icons.mouse_outlined,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _hardwarePointerCaptured
+                          ? '원격 터치패드 연결됨'
+                          : '포인터 캡처 대기 · 기능키만 전달 가능',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  if (_lastPhysicalKeyCode != null)
+                    Text(
+                      '키 ' + _lastPhysicalKeyCode.toString() +
+                        (_lastPhysicalScanCode == null ? '' :
+                            '/' + _lastPhysicalScanCode.toString()),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    tooltip: '태블릿 입력으로 돌아가기',
+                    onPressed: _togglePersonalHardwareMode,
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
+              SizedBox(
+                height: 32,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: 12,
+                  itemBuilder: (context, index) {
+                    final number = index + 1;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: OutlinedButton(
+                        onPressed: _canForwardPersonalInput
+                            ? () => inputModel.inputKey('VK_F' + number.toString())
+                            : null,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: const Size(42, 28),
+                        ),
+                        child: Text('F' + number.toString()),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void openTextComposer() {
+    // Restore local keyboard input before opening the Android IME.
+    if (_hardwareModeEnabled) {
+      unawaited(_personalRemoteInput.disable());
+    }
     if (!mounted ||
         !gFFI.ffiModel.pi.isSet.value ||
         gFFI.ffiModel.viewOnly ||
@@ -683,6 +895,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                   color: Colors.white,
                                   icon: Icon(Icons.keyboard),
                                   onPressed: openKeyboard),
+                              if (isAndroid)
+                                IconButton(
+                                  color: Colors.white,
+                                  icon: Icon(_hardwareModeEnabled
+                                      ? Icons.mouse
+                                      : Icons.mouse_outlined),
+                                  tooltip: '원격 키보드·터치패드 모드',
+                                  onPressed: _togglePersonalHardwareMode,
+                                ),
                               IconButton(
                                 color: Colors.white,
                                 icon: const Icon(Icons.edit_note),
@@ -803,6 +1024,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
             paints.add(FloatingMouseWidgets(
               ffi: gFFI,
             ));
+          }
+          if (isAndroid && _hardwareModeEnabled) {
+            paints.add(_personalHardwareOverlay());
           }
           return paints;
         }()));
