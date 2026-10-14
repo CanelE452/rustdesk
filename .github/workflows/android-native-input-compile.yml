@@ -30,9 +30,15 @@ jobs:
         with:
           channel: stable
           flutter-version: '3.24.5'
-      - uses: android-actions/setup-android@v3
-      - name: Install Android SDK platform
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Install required Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDK_MANAGER="$(find "$SDK_DIR/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDK_MANAGER"
+          yes | "$SDK_MANAGER" --licenses > /dev/null || true
+          "$SDK_MANAGER" 'platforms;android-36' 'build-tools;36.0.0'
       - name: Install Flutter dependencies
         working-directory: flutter
         run: flutter pub get
