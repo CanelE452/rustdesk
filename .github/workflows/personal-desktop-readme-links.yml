@@ -40,12 +40,12 @@ jobs:
 
           p = Path('README.md')
           s = p.read_text(encoding='utf-8')
-          old = ("**Windows x64 — 개인 수정본 준비 중** |\\n"
+          old = ("**Windows x64 — 개인 수정본 준비 중** |\n"
                  "**Ubuntu x64 — 개인 수정본 준비 중**")
           new = ("[**Windows x64 — 개인 수정본 EXE**]"
-                 "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.exe) |\\n"
+                 "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.exe) |\n"
                  "[**Windows x64 — 개인 수정본 MSI**]"
-                 "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.msi) |\\n"
+                 "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.msi) |\n"
                  "[**Ubuntu x64 — 개인 수정본 DEB**]"
                  "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Ubuntu-amd64.deb)")
           if old in s:
@@ -60,7 +60,7 @@ jobs:
           new_note = ("- [Windows/Ubuntu 개인 수정본 릴리스]"
                       "(https://github.com/CanelE452/rustdesk/releases/tag/personal-desktop-v0.1.0) · "
                       "[SHA-256 체크섬]"
-                      "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/SHA256SUMS.txt)\\n"
+                      "(https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/SHA256SUMS.txt)\n"
                       "- Windows EXE/MSI는 신뢰된 게시자의 코드 서명이 없는 시험용 파일이야. "
                       "Ubuntu DEB는 기존 RustDesk 패키지와 충돌하거나 대체할 수 있어. "
                       "각 운영체제에서 원격 제어를 직접 검증한 것은 아니야.")
