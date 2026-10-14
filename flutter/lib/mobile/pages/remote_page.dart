@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
+import 'package:flutter_hbb/mobile/hardware_input_protocol.dart';
 import 'package:flutter_hbb/mobile/widgets/composed_text_sheet.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
@@ -64,6 +66,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   bool _showBar = !isWebDesktop;
   bool _showGestureHelp = false;
   bool _isComposingText = false;
+  bool _hardwareMode = false;
+  bool _hardwareToggleBusy = false;
+  bool _hasCapturedMouseEvent = false;
+  int _hardwareMoveCount = 0;
+  int _hardwareFunctionKeyCount = 0;
+  String _lastHardwareFunctionKey = '-';
+  final _hardwarePointer = RemoteHardwarePointerState();
+  static const _hardwareChannel = MethodChannel('rustdesk_remote_hardware_input');
   String _value = '';
   Orientation? _currentOrientation;
   final _uniqueKey = UniqueKey();
@@ -97,6 +107,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    if (isAndroid) {
+      _hardwareChannel.setMethodCallHandler(_onRemoteHardwareEvent);
+    }
     gFFI.ffiModel.updateEventListener(sessionId, widget.id);
     gFFI.start(
       widget.id,
@@ -146,6 +159,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   Future<void> dispose() async {
+    if (isAndroid) {
+      _hardwareChannel.setMethodCallHandler(null);
+      unawaited(_hardwareChannel.invokeMethod('setEnabled', {'enabled': false}));
+    }
+    _releaseHardwareButtons();
+    _hardwarePointer.reset();
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
     // after several awaits (canvas save, image update, the `enable_soft_keyboard`
@@ -187,6 +206,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       trySyncClipboard();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      if (_hardwareMode) unawaited(_setHardwareMode(false));
     }
   }
 
@@ -410,6 +432,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   // selected Windows/Linux peer. This avoids forwarding intermediate Korean
   // IME composition events or transliterated key strokes.
   void openTextComposer() {
+    if (_hardwareMode) unawaited(_setHardwareMode(false));
     if (!mounted ||
         !gFFI.ffiModel.pi.isSet.value ||
         gFFI.ffiModel.viewOnly ||
@@ -476,7 +499,145 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     });
   }
 
+  bool get _hardwareInputAllowed =>
+      mounted &&
+      gFFI.ffiModel.pi.isSet.value &&
+      !gFFI.ffiModel.viewOnly &&
+      !gFFI.ffiModel.isPeerAndroid &&
+      gFFI.ffiModel.keyboard &&
+      !_isComposingText;
+
+  void _releaseHardwareButtons() {
+    if (!gFFI.ffiModel.pi.isSet.value || gFFI.ffiModel.viewOnly) {
+      _hardwarePointer.changeButtons(0);
+      return;
+    }
+    final cursor = _hardwarePointer.atCanvas(gFFI.canvasModel.size);
+    for (final change in _hardwarePointer.changeButtons(0)) {
+      inputModel.handleMouse(
+        {'type': 'mouseup', 'buttons': change.button},
+        cursor,
+      );
+    }
+  }
+
+  Future<void> _setHardwareMode(bool enabled) async {
+    if (!isAndroid || _hardwareToggleBusy || !mounted) return;
+    if (enabled && !_hardwareInputAllowed) {
+      showToast('원격 PC 연결과 키보드 제어 권한을 먼저 확인해줘');
+      return;
+    }
+    setState(() => _hardwareToggleBusy = true);
+    try {
+      if (!enabled) _releaseHardwareButtons();
+      final response = await _hardwareChannel.invokeMapMethod<String, dynamic>(
+        'setEnabled', {'enabled': enabled},
+      );
+      if (!mounted) return;
+      final requested = response?['requested'] == true;
+      if (enabled && !requested) {
+        showToast('Android 포인터 캡처 요청에 실패했어. 앱을 전면에 띄워줘');
+      }
+      setState(() {
+        _hardwareMode = enabled && requested;
+        _hasCapturedMouseEvent = false;
+        _hardwareMoveCount = 0;
+        _hardwareFunctionKeyCount = 0;
+        _lastHardwareFunctionKey = '-';
+        if (!_hardwareMode) _hardwarePointer.reset();
+      });
+      if (_hardwareMode) _physicalFocusNode.requestFocus();
+    } on MissingPluginException {
+      if (mounted) showToast('원격 마우스 기능이 포함된 새 Android 앱이 필요해');
+    } catch (e) {
+      debugPrint('Android hardware input mode failed: $e');
+      if (mounted) showToast('태블릿 입력 모드 전환 실패');
+    } finally {
+      if (mounted) setState(() => _hardwareToggleBusy = false);
+    }
+  }
+
+  Future<void> _onRemoteHardwareEvent(MethodCall call) async {
+    if (call.method != 'onEvent' || !mounted || !isAndroid) return;
+    if (call.arguments is! Map) return;
+    final data = Map<String, dynamic>.from(call.arguments as Map);
+    final kind = data['kind'];
+    if (kind == 'released') {
+      _releaseHardwareButtons();
+      _hardwarePointer.reset();
+      if (mounted) {
+        setState(() {
+          _hardwareMode = false;
+          _hasCapturedMouseEvent = false;
+        });
+      }
+      return;
+    }
+    if (!_hardwareMode || !_hardwareInputAllowed) return;
+    if (kind == 'function_key') {
+      final index = RemoteHardwarePointerState.functionIndex(data['index']);
+      if (index == null || data['down'] is! bool) return;
+      final repeat = data['repeat'] == true;
+      inputModel.inputKey(
+        'VK_F$index',
+        down: data['down'] == true,
+        press: repeat,
+      );
+      setState(() {
+        _lastHardwareFunctionKey = 'F$index';
+        if (data['down'] == true) _hardwareFunctionKeyCount++;
+      });
+      return;
+    }
+
+    final canvas = gFFI.canvasModel.size;
+    if (canvas.width <= 1 || canvas.height <= 1) return;
+    if (kind == 'move') {
+      final dx = (data['dx'] as num?)?.toDouble() ?? 0;
+      final dy = (data['dy'] as num?)?.toDouble() ?? 0;
+      if (!dx.isFinite || !dy.isFinite) return;
+      final next = _hardwarePointer.move(Offset(dx, dy), canvas);
+      inputModel.handleMouse(InputModel.getMouseEventMove(), next);
+      _hardwareMoveCount++;
+      if (!_hasCapturedMouseEvent || _hardwareMoveCount % 40 == 0) {
+        setState(() => _hasCapturedMouseEvent = true);
+      }
+    } else if (kind == 'buttons') {
+      final buttons = data['buttons'];
+      if (buttons is! int) return;
+      final pos = _hardwarePointer.atCanvas(canvas);
+      for (final change in _hardwarePointer.changeButtons(buttons)) {
+        inputModel.handleMouse(
+          {'type': change.down ? 'mousedown' : 'mouseup',
+            'buttons': change.button},
+          pos,
+        );
+      }
+      if (!_hasCapturedMouseEvent) {
+        setState(() => _hasCapturedMouseEvent = true);
+      }
+    } else if (kind == 'scroll') {
+      final dx = (data['x'] as num?)?.toDouble() ?? 0;
+      final dy = (data['y'] as num?)?.toDouble() ?? 0;
+      final wheel = _hardwarePointer.consumeWheel(Offset(dx, dy));
+      if (wheel != Offset.zero) {
+        bind.sessionSendMouse(
+          sessionId: sessionId,
+          msg: jsonEncode({
+            'type': 'wheel',
+            'x': wheel.dx.toInt().toString(),
+            'y': wheel.dy.toInt().toString(),
+          }),
+        );
+      }
+      if (!_hasCapturedMouseEvent) {
+        setState(() => _hasCapturedMouseEvent = true);
+      }
+    }
+  }
+
   void openKeyboard() {
+    if (_hardwareMode) unawaited(_setHardwareMode(false));
     final allowWaylandKeyboard =
         mainGetPeerBoolOptionSync(widget.id, kPeerOptionAllowWaylandKeyboard);
     if (shouldShowWaylandKeyboardPrompt(
@@ -689,6 +850,22 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                 tooltip: '문장 작성 후 전송',
                                 onPressed: openTextComposer,
                               ),
+                              if (isAndroid)
+                                IconButton(
+                                  color: _hardwareMode
+                                      ? Colors.yellowAccent
+                                      : Colors.white,
+                                  tooltip: _hardwareMode
+                                      ? '태블릿 원격 마우스·기능키 모드 끄기'
+                                      : '태블릿 원격 마우스·기능키 모드 켜기',
+                                  icon: Icon(_hardwareMode
+                                      ? Icons.mouse
+                                      : Icons.keyboard_alt_outlined),
+                                  onPressed: _hardwareToggleBusy
+                                      ? null
+                                      : () => unawaited(
+                                            _setHardwareMode(!_hardwareMode)),
+                                ),
                               IconButton(
                                 color: Colors.white,
                                 icon: Icon(gFFI.ffiModel.touchMode
@@ -761,6 +938,25 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
             KeyHelpTools(
                 keyboardIsVisible: keyboardIsVisible,
                 showGestureHelp: _showGestureHelp),
+            if (_hardwareMode)
+              Positioned(
+                left: 8,
+                bottom: 8,
+                child: Material(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Text(
+                      '원격 마우스: ${_hasCapturedMouseEvent ? "입력 확인" : "대기 중"}  '
+                      '이동 $_hardwareMoveCount회  '
+                      '기능키 $_hardwareFunctionKeyCount회 '
+                      '(마지막: $_lastHardwareFunctionKey)',
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                    ),
+                  ),
+                ),
+              ),
             SizedBox(
               width: 0,
               height: 0,
