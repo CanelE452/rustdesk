@@ -29,6 +29,9 @@ jobs:
           channel: stable
           flutter-version: '3.24.5'
       - uses: dtolnay/rust-toolchain@stable
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
       - name: Flutter dependencies
         working-directory: flutter
         run: flutter pub get
@@ -39,5 +42,4 @@ jobs:
       - name: Compile Android Kotlin
         working-directory: flutter/android
         run: |
-          chmod +x gradlew
-          ./gradlew :app:compileDebugKotlin --no-daemon --stacktrace
+          gradle :app:compileDebugKotlin --no-daemon --stacktrace
