@@ -112,6 +112,11 @@ class MainActivity : FlutterActivity() {
         personalRemoteInput?.onWindowFocusChanged(hasFocus)
     }
 
+    override fun onPointerCaptureChanged(hasCapture: Boolean) {
+        super.onPointerCaptureChanged(hasCapture)
+        personalRemoteInput?.onPointerCaptureChanged(hasCapture)
+    }
+
     override fun onPause() {
         // Capture must not survive leaving the remote-control activity.
         personalRemoteInput?.disable()
