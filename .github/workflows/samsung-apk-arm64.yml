@@ -148,6 +148,14 @@ jobs:
           assert src.count(original) == 1, "Upstream Android signing contract changed"
           src = src.replace(original, "signingConfig signingConfigs.debug")
           p.write_text(src)
+          gradle = Path("flutter/android/gradle.properties")
+          props = gradle.read_text()
+          assert "org.gradle.jvmargs=-Xmx1024M" in props, "Gradle memory contract changed"
+          props = props.replace(
+              "org.gradle.jvmargs=-Xmx1024M",
+              "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g",
+          )
+          gradle.write_text(props)
           PY
           echo "This personal package uses an ephemeral debug signing key."
           echo "It can coexist with official RustDesk but cannot be upgraded"
@@ -159,7 +167,7 @@ jobs:
         run: |
           cd flutter
           flutter pub get
-          flutter build apk --release --target-platform android-arm64 --split-per-abi
+          flutter build apk --release --no-shrink --target-platform android-arm64 --split-per-abi
           test -s build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
             ../RustDesk-Personal-Samsung-arm64.apk
