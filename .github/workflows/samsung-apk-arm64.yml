@@ -1,15 +1,15 @@
-name: Build Samsung tablet RustDesk APK (ARM64)
+name: Build Android personal client for phone and tablet (ARM64)
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - feature/samsung-hardware-input
+      - fix/android-viewer-least-privilege
     paths:
       - '.github/workflows/samsung-apk-arm64.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   RUST_VERSION: '1.75'
@@ -143,7 +143,7 @@ jobs:
           src = p.read_text()
           original = 'applicationId "com.carriez.flutter_hbb"'
           assert src.count(original) == 1, "Upstream Android applicationId contract changed"
-          src = src.replace(original, original + '\n        applicationIdSuffix ".personal"')
+          src = src.replace(original, original + '\n        applicationIdSuffix ".personal.client"')
           original = "signingConfig signingConfigs.release"
           assert src.count(original) == 1, "Upstream Android signing contract changed"
           src = src.replace(original, "signingConfig signingConfigs.debug")
@@ -161,6 +161,53 @@ jobs:
           echo "It can coexist with official RustDesk but cannot be upgraded"
           echo "by APKs signed with different keys."
 
+      - name: Remove unnecessary Android host capabilities
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          p = Path("flutter/android/app/src/main/AndroidManifest.xml")
+          ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+          ET.register_namespace('tools', 'http://schemas.android.com/tools')
+          a = '{http://schemas.android.com/apk/res/android}'
+          root = ET.parse(p).getroot()
+          app = root.find('application')
+          assert app is not None
+          expected = {
+              ('service', '.InputService'),
+              ('service', '.MainService'),
+              ('service', '.FloatingWindowService'),
+              ('receiver', '.BootReceiver'),
+          }
+          removed = set()
+          for node in list(app):
+              key = (node.tag, node.get(a + 'name'))
+              if key in expected:
+                  app.remove(node)
+                  removed.add(key)
+          if removed != expected:
+              raise SystemExit(f'Upstream host services changed: missing {expected - removed}')
+          # The Android client controls only remote Windows/Ubuntu PCs.
+          unused = {
+              'android.permission.RECEIVE_BOOT_COMPLETED',
+              'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+              'android.permission.RECORD_AUDIO',
+              'android.permission.SYSTEM_ALERT_WINDOW',
+              'android.permission.FOREGROUND_SERVICE',
+              'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION',
+              'android.permission.FOREGROUND_SERVICE_MICROPHONE',
+              'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
+          }
+          for node in list(root):
+              if node.tag == 'uses-permission' and node.get(a + 'name') in unused:
+                  root.remove(node)
+          app.set(a + 'label', 'RustDesk Personal')
+          ET.ElementTree(root).write(p, encoding='utf-8', xml_declaration=True)
+          if 'BIND_ACCESSIBILITY_SERVICE' in p.read_text():
+              raise SystemExit('Accessibility service remains in source manifest')
+          print('Personal phone/tablet outgoing-only Android manifest prepared')
+          PY
+
       - name: Build ARM64 release-mode APK
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
@@ -170,23 +217,50 @@ jobs:
           flutter build apk --release --no-shrink --target-platform android-arm64 --split-per-abi
           test -s build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-            ../RustDesk-Personal-Samsung-arm64.apk
+            ../RustDesk-Personal-Android-arm64.apk
 
       - name: Verify APK manifest and signature
         run: |
-          test -s RustDesk-Personal-Samsung-arm64.apk
-          ls -lh RustDesk-Personal-Samsung-arm64.apk
-          sha256sum RustDesk-Personal-Samsung-arm64.apk | tee apk.sha256
+          test -s RustDesk-Personal-Android-arm64.apk
+          ls -lh RustDesk-Personal-Android-arm64.apk
+          sha256sum RustDesk-Personal-Android-arm64.apk | tee apk.sha256
           BUILD_TOOLS="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
-          "${BUILD_TOOLS}/aapt" dump badging RustDesk-Personal-Samsung-arm64.apk | head -n 15
-          "${BUILD_TOOLS}/apksigner" verify --verbose RustDesk-Personal-Samsung-arm64.apk
+          "${BUILD_TOOLS}/aapt" dump badging RustDesk-Personal-Android-arm64.apk | head -n 15
+          "${BUILD_TOOLS}/apksigner" verify --verbose RustDesk-Personal-Android-arm64.apk
+          "${BUILD_TOOLS}/aapt" dump xmltree RustDesk-Personal-Android-arm64.apk AndroidManifest.xml > /tmp/viewer-manifest.txt
+          if grep -E 'BIND_ACCESSIBILITY_SERVICE|InputService|MainService|RECORD_AUDIO|SYSTEM_ALERT_WINDOW|RECEIVE_BOOT_COMPLETED' /tmp/viewer-manifest.txt; then
+            echo 'Non-client-only Android permissions/services remain in built APK.' >&2
+            exit 1
+          fi
+          if ! grep -q 'com.carriez.flutter_hbb.personal.client' /tmp/viewer-manifest.txt; then
+            echo 'Unexpected Android package ID; refusing release.' >&2
+            exit 1
+          fi
 
       - name: Upload installable APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: RustDesk-Personal-Samsung-arm64
+          name: RustDesk-Personal-Android-arm64
           path: |
-            RustDesk-Personal-Samsung-arm64.apk
+            RustDesk-Personal-Android-arm64.apk
             apk.sha256
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish least-privilege personal viewer prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag='personal-android-client-v0.1.1'
+          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo 'Viewer release already exists; refusing to replace signed APK'
+            exit 1
+          fi
+          gh release create "$tag" RustDesk-Personal-Android-arm64.apk apk.sha256 \
+            --repo "$GH_REPO" \
+            --target "$GITHUB_SHA" \
+            --title 'RustDesk Personal Android ARM64 — phone and tablet (test build)' \
+            --notes 'Outgoing remote-control client for both Android phones and tablets, with optional Samsung keyboard-cover input, Windows/Ubuntu targets. Removed Android incoming control/accessibility/screen capture/microphone services. Separate package ID com.carriez.flutter_hbb.personal.client. Google Play Protect results still depend on device policy. Debug-signed; future rebuilding may require uninstall before upgrade. Test real hardware before trusting for sensitive use.' \
+            --prerelease
