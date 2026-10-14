@@ -20,6 +20,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.WindowManager
+import android.view.KeyEvent
 import android.media.MediaCodecInfo
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
@@ -54,6 +55,7 @@ class MainActivity : FlutterActivity() {
     private val channelTag = "mChannel"
     private val logTag = "mMainActivity"
     private var mainService: MainService? = null
+    private var remoteHardwareInput: RemoteHardwareInput? = null
     private sealed class PendingPicker {
         data class ImportFiles(val result: MethodChannel.Result) : PendingPicker()
         data class ExportFile(val source: File, val result: MethodChannel.Result) : PendingPicker()
@@ -87,6 +89,8 @@ class MainActivity : FlutterActivity() {
             channelTag
         )
         initFlutterChannel(flutterMethodChannel!!)
+        remoteHardwareInput?.dispose()
+        remoteHardwareInput = RemoteHardwareInput(this, flutterEngine.dartExecutor.binaryMessenger)
         thread {
             try {
                 setCodecInfo()
@@ -94,6 +98,23 @@ class MainActivity : FlutterActivity() {
                 Log.e("MainActivity", "Failed to setCodecInfo: ${e.message}", e)
             }
         }
+    }
+
+    // Only F1-F12 can be consumed while the remote hardware mode is enabled.
+    // Android HOME and other system keys always follow the OS dispatch path.
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (remoteHardwareInput?.interceptFunctionKey(event) == true) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) remoteHardwareInput?.disable("focus_lost")
+    }
+
+    override fun onPause() {
+        remoteHardwareInput?.disable("paused")
+        super.onPause()
     }
 
     override fun onResume() {
@@ -232,6 +253,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        remoteHardwareInput?.dispose()
+        remoteHardwareInput = null
         Log.e(logTag, "onDestroy")
         // The process can outlive the UI whenever something keeps it alive:
         // MainService, or the accessibility InputService on its own. Only the
