@@ -125,6 +125,15 @@ class PersonalRemoteInput(
         if (!hasFocus && enabled) disable()
     }
 
+    fun onPointerCaptureChanged(hasCapture: Boolean) {
+        if (!enabled) return
+        captured = hasCapture
+        if (!hasCapture) {
+            resetPointerSamples()
+        }
+        emit(mapOf("type" to "capture", "captured" to hasCapture))
+    }
+
     /**
      * Return true only for F1-F12 events actually delivered to this Activity.
      * Non-function keys retain RustDesk/Flutter's existing input behavior.
@@ -167,10 +176,17 @@ class PersonalRemoteInput(
             captured = true
             emit(mapOf("type" to "capture", "captured" to true))
         }
-        val isTouchpad = hasSource(event.source, InputDevice.SOURCE_TOUCHPAD) ||
-            hasSource(event.device?.sources ?: 0, InputDevice.SOURCE_TOUCHPAD)
-        val isMouse = hasSource(event.source, InputDevice.SOURCE_MOUSE) ||
+        val isMouseRelative =
             hasSource(event.source, InputDevice.SOURCE_MOUSE_RELATIVE)
+        // A physical touchpad can advertise SOURCE_TOUCHPAD even when Android
+        // reports already-recognized relative mouse movements. In that case,
+        // prefer the relative deltas rather than differencing those deltas.
+        val isTouchpad = !isMouseRelative && (
+            hasSource(event.source, InputDevice.SOURCE_TOUCHPAD) ||
+                hasSource(event.device?.sources ?: 0, InputDevice.SOURCE_TOUCHPAD)
+            )
+        val isMouse = isMouseRelative ||
+            hasSource(event.source, InputDevice.SOURCE_MOUSE)
 
         when (event.actionMasked) {
             MotionEvent.ACTION_MOVE -> {
