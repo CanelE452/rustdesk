@@ -206,9 +206,17 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      if (isAndroid) gFFI.ffiModel.onAndroidAppResumed();
       trySyncClipboard();
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+    } else if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      // Home/app switching must not tear down an otherwise healthy session.
+      // Only release local hardware pointer capture, not the remote connection.
+      if (isAndroid) gFFI.ffiModel.onAndroidAppBackgrounded();
+      if (_hardwareMode) unawaited(_setHardwareMode(false));
+    } else if (state == AppLifecycleState.inactive) {
+      // A transient focus loss (permission dialog, notification shade) is not
+      // necessarily a true background transition; do not start recovery.
       if (_hardwareMode) unawaited(_setHardwareMode(false));
     }
   }
