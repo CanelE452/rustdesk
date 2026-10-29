@@ -1,16 +1,19 @@
-name: Build Android personal client for phone and tablet (ARM64)
+name: Build Android keyboard-cover input diagnostics APK
 
 on:
   workflow_call:
   workflow_dispatch:
   push:
     branches:
-      - fix/android-viewer-least-privilege
+      - fix/android-touchpad-fkeys-diagnostics
     paths:
       - '.github/workflows/samsung-apk-arm64.yml'
+      - 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RemoteHardwareInput.kt'
+      - 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt'
+      - 'flutter/lib/mobile/pages/remote_page.dart'
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   RUST_VERSION: '1.75'
@@ -51,7 +54,7 @@ jobs:
       - name: Checkout personal Android phone/tablet source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: fix/android-viewer-least-privilege
+          ref: fix/android-touchpad-fkeys-diagnostics
           submodules: recursive
           persist-credentials: false
 
@@ -145,7 +148,7 @@ jobs:
           src = p.read_text()
           original = 'applicationId "com.carriez.flutter_hbb"'
           assert src.count(original) == 1, "Upstream Android applicationId contract changed"
-          src = src.replace(original, original + '\n        applicationIdSuffix ".personal.client"')
+          src = src.replace(original, original + '\n        applicationIdSuffix ".personal.client.inputdiag"')
           original = "signingConfig signingConfigs.release"
           assert src.count(original) == 1, "Upstream Android signing contract changed"
           src = src.replace(original, "signingConfig signingConfigs.debug")
@@ -203,7 +206,7 @@ jobs:
           for node in list(root):
               if node.tag == 'uses-permission' and node.get(a + 'name') in unused:
                   root.remove(node)
-          app.set(a + 'label', 'RustDesk Personal')
+          app.set(a + 'label', 'RustDesk Input Test')
           ET.ElementTree(root).write(p, encoding='utf-8', xml_declaration=True)
           if 'BIND_ACCESSIBILITY_SERVICE' in p.read_text():
               raise SystemExit('Accessibility service remains in source manifest')
@@ -219,22 +222,22 @@ jobs:
           flutter build apk --release --no-shrink --target-platform android-arm64 --split-per-abi
           test -s build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-            ../RustDesk-Personal-Android-arm64.apk
+            ../RustDesk-InputDiag-Android-arm64.apk
 
       - name: Verify APK manifest and signature
         run: |
-          test -s RustDesk-Personal-Android-arm64.apk
-          ls -lh RustDesk-Personal-Android-arm64.apk
-          sha256sum RustDesk-Personal-Android-arm64.apk | tee apk.sha256
+          test -s RustDesk-InputDiag-Android-arm64.apk
+          ls -lh RustDesk-InputDiag-Android-arm64.apk
+          sha256sum RustDesk-InputDiag-Android-arm64.apk | tee apk.sha256
           BUILD_TOOLS="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
-          "${BUILD_TOOLS}/aapt" dump badging RustDesk-Personal-Android-arm64.apk | head -n 15
-          "${BUILD_TOOLS}/apksigner" verify --verbose RustDesk-Personal-Android-arm64.apk
-          "${BUILD_TOOLS}/aapt" dump xmltree RustDesk-Personal-Android-arm64.apk AndroidManifest.xml > /tmp/viewer-manifest.txt
+          "${BUILD_TOOLS}/aapt" dump badging RustDesk-InputDiag-Android-arm64.apk | head -n 15
+          "${BUILD_TOOLS}/apksigner" verify --verbose RustDesk-InputDiag-Android-arm64.apk
+          "${BUILD_TOOLS}/aapt" dump xmltree RustDesk-InputDiag-Android-arm64.apk AndroidManifest.xml > /tmp/viewer-manifest.txt
           if grep -E 'BIND_ACCESSIBILITY_SERVICE|InputService|MainService|RECORD_AUDIO|SYSTEM_ALERT_WINDOW|RECEIVE_BOOT_COMPLETED' /tmp/viewer-manifest.txt; then
             echo 'Non-client-only Android permissions/services remain in built APK.' >&2
             exit 1
           fi
-          if ! grep -q 'com.carriez.flutter_hbb.personal.client' /tmp/viewer-manifest.txt; then
+          if ! grep -q 'com.carriez.flutter_hbb.personal.client.inputdiag' /tmp/viewer-manifest.txt; then
             echo 'Unexpected Android package ID; refusing release.' >&2
             exit 1
           fi
@@ -242,91 +245,9 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: RustDesk-Personal-Android-arm64
+          name: RustDesk-InputDiag-Android-arm64
           path: |
-            RustDesk-Personal-Android-arm64.apk
+            RustDesk-InputDiag-Android-arm64.apk
             apk.sha256
           if-no-files-found: error
           retention-days: 30
-
-      - name: Publish least-privilege personal viewer prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          tag='personal-android-client-v0.1.1'
-          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo 'Viewer release already exists; refusing to replace signed APK'
-            exit 1
-          fi
-          gh release create "$tag" RustDesk-Personal-Android-arm64.apk apk.sha256 \
-            --repo "$GH_REPO" \
-            --target "$(git rev-parse HEAD)" \
-            --title 'RustDesk Personal Android ARM64 — phone and tablet (test build)' \
-            --notes 'Outgoing remote-control client for both Android phones and tablets, with optional Samsung keyboard-cover input, Windows/Ubuntu targets. Removed Android incoming control/accessibility/screen capture/microphone services. Separate package ID com.carriez.flutter_hbb.personal.client. Google Play Protect results still depend on device policy. Debug-signed; future rebuilding may require uninstall before upgrade. Test real hardware before trusting for sensitive use.' \
-            --prerelease
-
-      - name: Link verified APK directly in README
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # Only a release containing the verified APK may replace the
-          # README's "build pending" status with a direct installer URL.
-          gh release view personal-android-client-v0.1.1 --repo "$GH_REPO" \
-            --json assets --jq '.assets[].name' > /tmp/android-release-assets.txt
-          grep -Fqx 'RustDesk-Personal-Android-arm64.apk' /tmp/android-release-assets.txt
-          grep -Fqx 'apk.sha256' /tmp/android-release-assets.txt
-          python3 - <<'PY'
-          import base64
-          import json
-          import os
-          import subprocess
-
-          repo = os.environ["GH_REPO"]
-          target = f"repos/{repo}/contents/README.md"
-          previous = json.loads(subprocess.check_output(
-              ["gh", "api", f"{target}?ref=master"], text=True))
-          old_text = base64.b64decode(previous["content"]).decode("utf-8")
-          placeholder = "**Android 휴대폰·태블릿 공용 (ARM64) — 설치 차단 문제 수정 중**"
-          apk_url = (
-              f"https://github.com/{repo}/releases/download/"
-              "personal-android-client-v0.1.1/RustDesk-Personal-Android-arm64.apk"
-          )
-          direct_link = f"[**Android 휴대폰·태블릿 공용 APK 바로 다운로드**]({apk_url})"
-          if old_text.count(placeholder) == 1:
-              new_text = old_text.replace(placeholder, direct_link, 1)
-          elif direct_link in old_text:
-              print("README direct link already present")
-              raise SystemExit(0)
-          else:
-              raise SystemExit("README download placeholder changed; refusing edit")
-
-          note = (
-              "- [새 Android 휴대폰·태블릿 공용 v0.1.1 릴리스]"
-              f"(https://github.com/{repo}/releases/tag/personal-android-client-v0.1.1)"
-              " · [APK 바로 다운로드](" + apk_url + ")."
-              " APK를 내려받은 뒤 Android의 다운로드 목록에서 파일을 열고,"
-              " 운영체제 설치 확인을 눌러야 해. Play 프로텍트 차단이 재발하면"
-              " 우회하지 말고 설치를 중단해.\n"
-          )
-          old_heading = "- [이전 Android v0.1.0 릴리스 — 설치 실패 보고로 비추천]"
-          if new_text.count(old_heading) != 1:
-              raise SystemExit("README Android notes changed; refusing edit")
-          new_text = new_text.replace(old_heading, note + old_heading, 1)
-
-          payload = {
-              "message": "docs(readme): add verified phone/tablet APK direct download",
-              "branch": "master",
-              "sha": previous["sha"],
-              "content": base64.b64encode(new_text.encode("utf-8")).decode("ascii"),
-          }
-          subprocess.run(
-              ["gh", "api", "--method", "PUT", target, "--input", "-"],
-              input=json.dumps(payload), text=True, check=True,
-              stdout=subprocess.DEVNULL,
-          )
-          print("Updated README with verified direct APK download.")
-          PY
