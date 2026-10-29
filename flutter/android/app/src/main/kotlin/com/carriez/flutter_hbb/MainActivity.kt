@@ -107,6 +107,11 @@ class MainActivity : FlutterActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    override fun onPointerCaptureChanged(hasCapture: Boolean) {
+        super.onPointerCaptureChanged(hasCapture)
+        remoteHardwareInput?.onPointerCaptureStateChanged(hasCapture)
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (!hasFocus) remoteHardwareInput?.disable("focus_lost")
