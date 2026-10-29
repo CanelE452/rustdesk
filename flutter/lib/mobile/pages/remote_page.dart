@@ -67,6 +67,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   bool _showGestureHelp = false;
   bool _isComposingText = false;
   bool _hardwareMode = false;
+  bool _hardwareCaptureActive = false;
   bool _hardwareToggleBusy = false;
   bool _hasCapturedMouseEvent = false;
   int _hardwareMoveCount = 0;
@@ -540,6 +541,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       }
       setState(() {
         _hardwareMode = enabled && requested;
+        _hardwareCaptureActive = enabled &&
+            (response?['captured'] == true || _hardwareCaptureActive);
         _hasCapturedMouseEvent = false;
         _hardwareMoveCount = 0;
         _hardwareFunctionKeyCount = 0;
@@ -562,12 +565,19 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (call.arguments is! Map) return;
     final data = Map<String, dynamic>.from(call.arguments as Map);
     final kind = data['kind'];
+    if (kind == 'capture_state') {
+      // Pointer capture is asynchronous: the request response alone cannot
+      // prove that Android stopped moving its local tablet cursor.
+      setState(() => _hardwareCaptureActive = data['captured'] == true);
+      return;
+    }
     if (kind == 'released') {
       _releaseHardwareButtons();
       _hardwarePointer.reset();
       if (mounted) {
         setState(() {
           _hardwareMode = false;
+          _hardwareCaptureActive = false;
           _hasCapturedMouseEvent = false;
         });
       }
@@ -947,12 +957,20 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   borderRadius: BorderRadius.circular(6),
                   child: Padding(
                     padding: const EdgeInsets.all(6),
-                    child: Text(
-                      '원격 마우스: ${_hasCapturedMouseEvent ? "입력 확인" : "대기 중"}  '
-                      '이동 $_hardwareMoveCount회  '
-                      '기능키 $_hardwareFunctionKeyCount회 '
-                      '(마지막: $_lastHardwareFunctionKey)',
-                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width - 32,
+                      ),
+                      child: Text(
+                        '포인터 캡처: ${_hardwareCaptureActive ? "성공" : "미확인"}  '
+                        '마우스: ${_hasCapturedMouseEvent ? "수신" : "대기"}\n'
+                        '이동 $_hardwareMoveCount회 / '
+                        'F키 $_hardwareFunctionKeyCount회 '
+                        '(최근: $_lastHardwareFunctionKey)',
+                        style: const TextStyle(
+                          color: Colors.white, fontSize: 11,
+                        ),
+                      ),
                     ),
                   ),
                 ),
