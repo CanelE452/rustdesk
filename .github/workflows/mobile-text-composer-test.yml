@@ -7,9 +7,12 @@ on:
       - feature/personal-multiplatform
       - feature/samsung-hardware-input
       - fix/android-touchpad-fkeys-diagnostics
+      - fix/android-background-recovery
     paths:
       - '.github/workflows/mobile-text-composer-test.yml'
       - 'flutter/lib/mobile/pages/remote_page.dart'
+      - 'flutter/lib/mobile/background_connection_policy.dart'
+      - 'flutter/lib/models/model.dart'
       - 'flutter/lib/mobile/hardware_input_protocol.dart'
       - 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt'
       - 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RemoteHardwareInput.kt'
@@ -18,6 +21,7 @@ on:
       - 'flutter/lib/desktop/utils/two_window_layout.dart'
       - 'flutter/lib/utils/multi_window_manager.dart'
       - 'flutter/test/composed_text_sheet_test.dart'
+      - 'flutter/test/background_connection_policy_test.dart'
       - 'flutter/test/hardware_input_protocol_test.dart'
       - 'flutter/test/two_window_layout_test.dart'
 
@@ -39,10 +43,10 @@ jobs:
         run: flutter pub get
       - name: Widget and window layout tests
         working-directory: flutter
-        run: flutter test test/composed_text_sheet_test.dart test/two_window_layout_test.dart test/hardware_input_protocol_test.dart
+        run: flutter test test/composed_text_sheet_test.dart test/two_window_layout_test.dart test/hardware_input_protocol_test.dart test/background_connection_policy_test.dart
       - name: Dart syntax validation
         working-directory: flutter
-        run: dart format --output=none lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart lib/mobile/hardware_input_protocol.dart lib/desktop/pages/connection_page.dart lib/desktop/utils/two_window_layout.dart lib/utils/multi_window_manager.dart test/composed_text_sheet_test.dart test/two_window_layout_test.dart test/hardware_input_protocol_test.dart
+        run: dart format --output=none lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart lib/mobile/hardware_input_protocol.dart lib/mobile/background_connection_policy.dart lib/models/model.dart lib/desktop/pages/connection_page.dart lib/desktop/utils/two_window_layout.dart lib/utils/multi_window_manager.dart test/composed_text_sheet_test.dart test/two_window_layout_test.dart test/hardware_input_protocol_test.dart test/background_connection_policy_test.dart
       - name: Analyze modified sources and tests
         working-directory: flutter
-        run: flutter analyze --no-fatal-infos lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart lib/mobile/hardware_input_protocol.dart lib/desktop/pages/connection_page.dart lib/desktop/utils/two_window_layout.dart lib/utils/multi_window_manager.dart test/composed_text_sheet_test.dart test/two_window_layout_test.dart test/hardware_input_protocol_test.dart
+        run: flutter analyze --no-fatal-infos lib/mobile/pages/remote_page.dart lib/mobile/widgets/composed_text_sheet.dart lib/mobile/hardware_input_protocol.dart lib/mobile/background_connection_policy.dart lib/models/model.dart lib/desktop/pages/connection_page.dart lib/desktop/utils/two_window_layout.dart lib/utils/multi_window_manager.dart test/composed_text_sheet_test.dart test/two_window_layout_test.dart test/hardware_input_protocol_test.dart test/background_connection_policy_test.dart
