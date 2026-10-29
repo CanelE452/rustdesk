@@ -1,16 +1,18 @@
-name: Build Android keyboard-cover input diagnostics APK
+name: Build Android background recovery and touchpad test APK
 
 on:
   workflow_call:
   workflow_dispatch:
   push:
     branches:
-      - fix/android-touchpad-fkeys-diagnostics
+      - fix/android-background-recovery
     paths:
       - '.github/workflows/samsung-apk-arm64.yml'
       - 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RemoteHardwareInput.kt'
       - 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt'
       - 'flutter/lib/mobile/pages/remote_page.dart'
+      - 'flutter/lib/models/model.dart'
+      - 'flutter/lib/mobile/background_connection_policy.dart'
 
 permissions:
   contents: read
@@ -54,7 +56,7 @@ jobs:
       - name: Checkout personal Android phone/tablet source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: fix/android-touchpad-fkeys-diagnostics
+          ref: fix/android-background-recovery
           submodules: recursive
           persist-credentials: false
 
@@ -148,7 +150,7 @@ jobs:
           src = p.read_text()
           original = 'applicationId "com.carriez.flutter_hbb"'
           assert src.count(original) == 1, "Upstream Android applicationId contract changed"
-          src = src.replace(original, original + '\n        applicationIdSuffix ".personal.client.inputdiag"')
+          src = src.replace(original, original + '\n        applicationIdSuffix ".personal.client.recoverytest"')
           original = "signingConfig signingConfigs.release"
           assert src.count(original) == 1, "Upstream Android signing contract changed"
           src = src.replace(original, "signingConfig signingConfigs.debug")
@@ -206,7 +208,7 @@ jobs:
           for node in list(root):
               if node.tag == 'uses-permission' and node.get(a + 'name') in unused:
                   root.remove(node)
-          app.set(a + 'label', 'RustDesk Input Test')
+          app.set(a + 'label', 'RustDesk Recovery Test')
           ET.ElementTree(root).write(p, encoding='utf-8', xml_declaration=True)
           if 'BIND_ACCESSIBILITY_SERVICE' in p.read_text():
               raise SystemExit('Accessibility service remains in source manifest')
@@ -222,22 +224,22 @@ jobs:
           flutter build apk --release --no-shrink --target-platform android-arm64 --split-per-abi
           test -s build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-            ../RustDesk-InputDiag-Android-arm64.apk
+            ../RustDesk-RecoveryTest-Android-arm64.apk
 
       - name: Verify APK manifest and signature
         run: |
-          test -s RustDesk-InputDiag-Android-arm64.apk
-          ls -lh RustDesk-InputDiag-Android-arm64.apk
-          sha256sum RustDesk-InputDiag-Android-arm64.apk | tee apk.sha256
+          test -s RustDesk-RecoveryTest-Android-arm64.apk
+          ls -lh RustDesk-RecoveryTest-Android-arm64.apk
+          sha256sum RustDesk-RecoveryTest-Android-arm64.apk | tee apk.sha256
           BUILD_TOOLS="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
-          "${BUILD_TOOLS}/aapt" dump badging RustDesk-InputDiag-Android-arm64.apk | head -n 15
-          "${BUILD_TOOLS}/apksigner" verify --verbose RustDesk-InputDiag-Android-arm64.apk
-          "${BUILD_TOOLS}/aapt" dump xmltree RustDesk-InputDiag-Android-arm64.apk AndroidManifest.xml > /tmp/viewer-manifest.txt
+          "${BUILD_TOOLS}/aapt" dump badging RustDesk-RecoveryTest-Android-arm64.apk | head -n 15
+          "${BUILD_TOOLS}/apksigner" verify --verbose RustDesk-RecoveryTest-Android-arm64.apk
+          "${BUILD_TOOLS}/aapt" dump xmltree RustDesk-RecoveryTest-Android-arm64.apk AndroidManifest.xml > /tmp/viewer-manifest.txt
           if grep -E 'BIND_ACCESSIBILITY_SERVICE|InputService|MainService|RECORD_AUDIO|SYSTEM_ALERT_WINDOW|RECEIVE_BOOT_COMPLETED' /tmp/viewer-manifest.txt; then
             echo 'Non-client-only Android permissions/services remain in built APK.' >&2
             exit 1
           fi
-          if ! grep -q 'com.carriez.flutter_hbb.personal.client.inputdiag' /tmp/viewer-manifest.txt; then
+          if ! grep -q 'com.carriez.flutter_hbb.personal.client.recoverytest' /tmp/viewer-manifest.txt; then
             echo 'Unexpected Android package ID; refusing release.' >&2
             exit 1
           fi
@@ -245,9 +247,9 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: RustDesk-InputDiag-Android-arm64
+          name: RustDesk-RecoveryTest-Android-arm64
           path: |
-            RustDesk-InputDiag-Android-arm64.apk
+            RustDesk-RecoveryTest-Android-arm64.apk
             apk.sha256
           if-no-files-found: error
           retention-days: 30
