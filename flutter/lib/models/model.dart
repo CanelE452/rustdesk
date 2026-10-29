@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/mobile/background_connection_policy.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
@@ -123,6 +124,8 @@ class FfiModel with ChangeNotifier {
   DateTime? _offlineReconnectStartTime;
   bool _androidDocumentPickerActive = false;
   bool _androidDocumentPickerInterruptedConnection = false;
+  final AndroidBackgroundConnectionPolicy _androidBackgroundRecovery =
+      AndroidBackgroundConnectionPolicy();
   bool _viewOnly = false;
   bool _showMyCursor = false;
   WeakReference<FFI> parent;
@@ -258,6 +261,7 @@ class FfiModel with ChangeNotifier {
     _androidDocumentPickerActive = false;
     _androidDocumentPickerInterruptedConnection = false;
     resetRestartReconnectState();
+    _androidBackgroundRecovery.reset();
     clearPermissions();
     waitForImageTimer?.cancel();
     timerScreenshot?.cancel();
@@ -343,6 +347,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'sync_platform_additions') {
         handlePlatformAdditions(evt, sessionId, peerId);
       } else if (name == 'connection_ready') {
+        _androidBackgroundRecovery.onConnectionReady();
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
         resetRestartReconnectState();
@@ -898,6 +903,27 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
+    // Only recover recognized transport failures observed while Android was
+    // backgrounded or shortly after returning. Explicit close, authentication
+    // errors, remote rejection, and normal foreground failures are unchanged.
+    if (isAndroid && !_androidDocumentPickerActive) {
+      final recovery = _androidBackgroundRecovery.onConnectionError(
+        type: type is String ? type : null,
+        title: title is String ? title : null,
+        text: text is String ? text : null,
+      );
+      if (recovery == BackgroundConnectionAction.deferUntilResume) {
+        return;
+      }
+      if (recovery == BackgroundConnectionAction.reconnectOnce &&
+          parent.target?.closed == false) {
+        _timer?.cancel();
+        _timer = null;
+        reconnect(dialogManager, sessionId, false);
+        return;
+      }
+    }
+
     // Disable relative mouse mode on any error-type message to ensure cursor is released.
     // This includes connection errors, session-ending messages, elevation errors, etc.
     // Safety: releasing pointer lock on errors prevents the user from being stuck.
@@ -972,6 +998,22 @@ class FfiModel with ChangeNotifier {
   void resetRestartReconnectState() {
     _restartReconnectDelayTimer?.cancel();
     _restartReconnectDelayTimer = null;
+  }
+
+  /// The Android Activity/Flutter route remains alive across Home/app switching.
+  /// Do not close or restart a healthy session just because it loses focus.
+  void onAndroidAppBackgrounded() {
+    if (!isAndroid || parent.target?.closed != false) return;
+    _androidBackgroundRecovery.onBackground();
+  }
+
+  void onAndroidAppResumed() {
+    if (!isAndroid) return;
+    final shouldReconnect = _androidBackgroundRecovery.onResume();
+    if (!shouldReconnect || parent.target?.closed != false) return;
+    _timer?.cancel();
+    _timer = null;
+    reconnect(parent.target!.dialogManager, sessionId, false);
   }
 
   void beginAndroidDocumentPicker() {
