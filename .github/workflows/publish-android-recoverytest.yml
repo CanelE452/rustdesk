@@ -1,4 +1,4 @@
-name: Publish verified Android Recovery Test APK
+name: Publish verified Android Recovery Test APK to direct download
 
 on:
   workflow_dispatch:
@@ -22,6 +22,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: Checkout repository for direct-download branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
       - name: Download APK only from the confirmed successful build
         env:
           GH_TOKEN: ${{ github.token }}
@@ -66,23 +70,43 @@ jobs:
           (cd release && sha256sum RustDesk-Personal-Android-RecoveryTest-arm64.apk > SHA256SUMS.txt)
           cat release/SHA256SUMS.txt
 
-      - name: Publish test APK as a direct-download GitHub Release
+      - name: Publish verified APK to an orphan direct-download branch
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          tag='personal-android-recoverytest-v0.1.2'
-          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo 'The release tag already exists. Refusing to replace its signature.' >&2
+          branch='personal-apk-downloads'
+          if git ls-remote --heads origin "$branch" | grep -q .; then
+            echo 'Binary download branch already exists. Refusing to overwrite without review.' >&2
             exit 1
           fi
-          gh release create "$tag" \
-            release/RustDesk-Personal-Android-RecoveryTest-arm64.apk \
-            release/SHA256SUMS.txt \
-            --repo "$GH_REPO" \
-            --target d5d40e0c6cba8bb3a442b0ddabda18b414a9e641 \
-            --title 'RustDesk Personal Android Recovery Test (ARM64)' \
-            --notes 'Experimental Android phone/tablet APK built successfully in workflow run 40868797058. Includes keyboard-cover touchpad/F-key diagnostics and bounded app-return network recovery. Original build SHA: d5d40e0c6cba8bb3a442b0ddabda18b414a9e641. Uses a separate test package ID and debug certificate. Not tested on the physical Samsung device; not verified to fix all background disconnects. Android Play Protect may still block installation; do not bypass a security warning. Download the APK directly via the release asset; Android always asks the user to confirm installation.' \
-            --prerelease
-          gh release view "$tag" --repo "$GH_REPO" --json url,assets
+          temp_dir="$(mktemp -d)"
+          cp release/RustDesk-Personal-Android-RecoveryTest-arm64.apk "$temp_dir/"
+          cp release/SHA256SUMS.txt "$temp_dir/"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout --orphan "$branch"
+          git rm -rf --quiet .
+          cp "$temp_dir/RustDesk-Personal-Android-RecoveryTest-arm64.apk" .
+          cp "$temp_dir/SHA256SUMS.txt" .
+          cat > README.md <<'EOF'
+          # Experimental Android direct download
+
+          The binary in this branch is the previously validated build from
+          GitHub Actions run 40868797058, source commit
+          d5d40e0c6cba8bb3a442b0ddabda18b414a9e641.
+
+          This is a phone/tablet test APK, not a verified production release.
+          It has a separate app ID and a debug signing certificate.
+          It contains experimental touchpad, F-key and app-return recovery
+          logic. If Google Play Protect blocks installation, stop rather
+          than bypass the warning.
+          EOF
+          git add README.md RustDesk-Personal-Android-RecoveryTest-arm64.apk SHA256SUMS.txt
+          git commit -m 'binary(android): publish verified recovery-test APK for direct download'
+          git push origin HEAD:refs/heads/"$branch"
+          echo "APK direct link:"
+          echo "https://raw.githubusercontent.com/$GH_REPO/$branch/RustDesk-Personal-Android-RecoveryTest-arm64.apk"
+          echo 'Checksum:'
+          cat SHA256SUMS.txt
