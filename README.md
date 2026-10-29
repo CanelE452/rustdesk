@@ -13,11 +13,15 @@
 
 **Personal build (this fork / 이 저장소의 수정본)**
 
-[**Android 휴대폰·태블릿 공용 APK 바로 다운로드**](https://github.com/CanelE452/rustdesk/releases/download/personal-android-client-v0.1.1/RustDesk-Personal-Android-arm64.apk) |
+[**Android 휴대폰·태블릿 — 연결 복구·터치패드 테스트 APK 바로 다운로드**](https://raw.githubusercontent.com/CanelE452/rustdesk/personal-apk-downloads/RustDesk-Personal-Android-RecoveryTest-arm64.apk) |
 [**Windows x64 — 개인 수정본 EXE**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.exe) |
 [**Windows x64 — 개인 수정본 MSI**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.msi) |
 [**Ubuntu x64 — 개인 수정본 DEB**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Ubuntu-amd64.deb)
 
+- [**최신 Android 테스트 APK 직접 다운로드**](https://raw.githubusercontent.com/CanelE452/rustdesk/personal-apk-downloads/RustDesk-Personal-Android-RecoveryTest-arm64.apk) · [SHA-256 체크섬](https://raw.githubusercontent.com/CanelE452/rustdesk/personal-apk-downloads/SHA256SUMS.txt) · [빌드 성공 기록](https://github.com/CanelE452/rustdesk/actions/runs/40868797058)
+- Android 휴대폰·태블릿 ARM64용 별도 테스트 앱이야. **기존 앱과 다른 앱 식별자**를 사용하고, 삼성 키보드 케이스 터치패드·F키 진단 및 백그라운드 복귀 시 연결 복구를 시험할 수 있어. 실제 기기에서 모든 문제가 해결됐다고 검증한 것은 아니야.
+- APK 다운로드 후 파일을 열고 Android의 설치 확인을 진행해야 해. **Play 프로텍트에서 차단되면 우회하지 말고 설치를 중단해.** 테스트용 디버그 서명이라 나중에 업데이트할 때 삭제 후 재설치가 필요할 수 있어.
+- [이전 일반용 Android v0.1.1 APK](https://github.com/CanelE452/rustdesk/releases/download/personal-android-client-v0.1.1/RustDesk-Personal-Android-arm64.apk)도 별도로 보관돼 있어.
 - [**Android 휴대폰·태블릿 공용 APK 새로 빌드하기**](https://github.com/CanelE452/rustdesk/actions/workflows/run-personal-android-client.yml) — Actions에서 **Run workflow → master → Run workflow**를 눌러 실행해. 빌드 및 보안·서명 검사가 성공하면 위 항목이 **APK 바로 다운로드** 링크로 자동 변경돼.
 - [새 Android 휴대폰·태블릿 공용 v0.1.1 릴리스](https://github.com/CanelE452/rustdesk/releases/tag/personal-android-client-v0.1.1) · [APK 바로 다운로드](https://github.com/CanelE452/rustdesk/releases/download/personal-android-client-v0.1.1/RustDesk-Personal-Android-arm64.apk). APK를 내려받은 뒤 Android의 다운로드 목록에서 파일을 열고, 운영체제 설치 확인을 눌러야 해. Play 프로텍트 차단이 재발하면 우회하지 말고 설치를 중단해.
 - [이전 Android v0.1.0 릴리스 — 설치 실패 보고로 비추천](https://github.com/CanelE452/rustdesk/releases/tag/personal-android-v0.1.0)
