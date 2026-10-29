@@ -6,6 +6,7 @@ on:
     branches:
       - feature/personal-multiplatform
       - feature/samsung-hardware-input
+      - fix/android-touchpad-fkeys-diagnostics
     paths:
       - '.github/workflows/mobile-text-composer-test.yml'
       - 'flutter/lib/mobile/pages/remote_page.dart'
