@@ -11,23 +11,16 @@
 
 ## Downloads / 설치 파일 선택
 
-**Personal build (this fork / 이 저장소의 수정본)**
+**개인 수정본 — 다운로드 링크**
 
-[**Android 휴대폰·태블릿 — 연결 복구·터치패드 테스트 APK 바로 다운로드**](https://raw.githubusercontent.com/CanelE452/rustdesk/personal-apk-downloads/RustDesk-Personal-Android-RecoveryTest-arm64.apk) |
-[**Windows x64 — 개인 수정본 EXE**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.exe) |
-[**Windows x64 — 개인 수정본 MSI**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.msi) |
-[**Ubuntu x64 — 개인 수정본 DEB**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Ubuntu-amd64.deb)
+[**Android 휴대폰·태블릿 (ARM64) · APK 다운로드**](https://raw.githubusercontent.com/CanelE452/rustdesk/personal-apk-downloads/RustDesk-Personal-Android-RecoveryTest-arm64.apk) |
+[**Windows x64 · EXE 다운로드**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.exe) |
+[**Windows x64 · MSI 다운로드**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.msi) |
+[**Ubuntu x64 · DEB 다운로드**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Ubuntu-amd64.deb)
 
-- [**최신 Android 테스트 APK 직접 다운로드**](https://raw.githubusercontent.com/CanelE452/rustdesk/personal-apk-downloads/RustDesk-Personal-Android-RecoveryTest-arm64.apk) · [SHA-256 체크섬](https://raw.githubusercontent.com/CanelE452/rustdesk/personal-apk-downloads/SHA256SUMS.txt) · [빌드 성공 기록](https://github.com/CanelE452/rustdesk/actions/runs/40868797058)
-- Android 휴대폰·태블릿 ARM64용 별도 테스트 앱이야. **기존 앱과 다른 앱 식별자**를 사용하고, 삼성 키보드 케이스 터치패드·F키 진단 및 백그라운드 복귀 시 연결 복구를 시험할 수 있어. 실제 기기에서 모든 문제가 해결됐다고 검증한 것은 아니야.
-- APK 다운로드 후 파일을 열고 Android의 설치 확인을 진행해야 해. **Play 프로텍트에서 차단되면 우회하지 말고 설치를 중단해.** 테스트용 디버그 서명이라 나중에 업데이트할 때 삭제 후 재설치가 필요할 수 있어.
-- [이전 일반용 Android v0.1.1 APK](https://github.com/CanelE452/rustdesk/releases/download/personal-android-client-v0.1.1/RustDesk-Personal-Android-arm64.apk)도 별도로 보관돼 있어.
-- [이전 Android v0.1.1 일반용 APK 빌드 작업](https://github.com/CanelE452/rustdesk/actions/workflows/run-personal-android-client.yml) — 현재 메인 다운로드 링크의 Recovery Test와 별개야.
-- [새 Android 휴대폰·태블릿 공용 v0.1.1 릴리스](https://github.com/CanelE452/rustdesk/releases/tag/personal-android-client-v0.1.1) · [APK 바로 다운로드](https://github.com/CanelE452/rustdesk/releases/download/personal-android-client-v0.1.1/RustDesk-Personal-Android-arm64.apk). APK를 내려받은 뒤 Android의 다운로드 목록에서 파일을 열고, 운영체제 설치 확인을 눌러야 해. Play 프로텍트 차단이 재발하면 우회하지 말고 설치를 중단해.
-- [이전 Android v0.1.0 릴리스 — 설치 실패 보고로 비추천](https://github.com/CanelE452/rustdesk/releases/tag/personal-android-v0.1.0)
-- Android 휴대폰과 태블릿에서 공통으로 사용할 수 있는 ARM64 빌드야. 과거 Android v0.1.0은 Play 프로텍트 차단과 설치 실패가 보고됐어. 현재 Recovery Test APK는 서명·앱 식별자·권한 검사를 통과했지만, 삼성 키보드 케이스와 백그라운드 연결 유지의 실제 동작은 검증 중이야.
-- [Windows·Ubuntu 개인 수정본 릴리스](https://github.com/CanelE452/rustdesk/releases/tag/personal-desktop-v0.1.0) · [SHA-256 체크섬](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/SHA256SUMS.txt)
-- **Windows EXE·MSI는 공인 코드 서명이 없는 시험용 파일**이야. Ubuntu DEB는 기존 RustDesk 패키지와 충돌하거나 이를 대체할 수 있으니 설치 전에 설정을 백업해. Windows·Ubuntu 실기 원격 제어 및 다중 창 동작은 아직 검증하지 않았어.
+Android APK는 **연결 복구·터치패드·F키 진단을 포함한 시험용 버전**이야. [APK SHA-256](https://raw.githubusercontent.com/CanelE452/rustdesk/personal-apk-downloads/SHA256SUMS.txt) · [빌드 성공 기록](https://github.com/CanelE452/rustdesk/actions/runs/40868797058). 실기에서 모든 기능이 정상 작동하는지는 미검증이야. 다운로드 후 APK를 열고 Android 설치 확인을 해야 하며, **Play 프로텍트가 차단하면 우회하지 말고 설치를 중단해.**
+
+Windows EXE·MSI는 공인 코드 서명이 없는 시험용 파일이야. Ubuntu DEB는 기존 RustDesk 패키지와 충돌하거나 이를 대체할 수 있어. 두 플랫폼의 다중 원격 창 동작도 실기 검증 전이야. [Windows·Ubuntu SHA-256](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/SHA256SUMS.txt)
 
 **Official RustDesk downloads (unmodified / 공식 원본 프로그램)**
 
