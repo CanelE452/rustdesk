@@ -12,7 +12,7 @@ import android.view.MotionEvent
  * presses click, and a button-less down on a mouse source becomes a trackpad pan (scrolling).
  */
 internal class TouchpadMouseAdapter {
-    // Pinches and three/four-finger swipes keep their finger events for the whole gesture.
+    // Pinches keep their finger events for the whole gesture (local zoom on the remote page).
     private var passThroughGesture = false
 
     /** Returns a mouse copy of [event] that the caller must recycle, or null to keep [event]. */
@@ -24,7 +24,7 @@ internal class TouchpadMouseAdapter {
         }
         val action = event.actionMasked
         if (action == MotionEvent.ACTION_DOWN) {
-            passThroughGesture = isMultiFingerGesture(event)
+            passThroughGesture = isPinch(event)
         }
         val passThrough = passThroughGesture
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
@@ -67,12 +67,8 @@ internal class TouchpadMouseAdapter {
         )
     }
 
-    private fun isMultiFingerGesture(event: MotionEvent): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            return false
-        }
-        val classification = event.classification
-        return classification == MotionEvent.CLASSIFICATION_PINCH ||
-            classification == MotionEvent.CLASSIFICATION_MULTI_FINGER_SWIPE
+    private fun isPinch(event: MotionEvent): Boolean {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            event.classification == MotionEvent.CLASSIFICATION_PINCH
     }
 }
