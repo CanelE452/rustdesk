@@ -1,0 +1,277 @@
+name: Personal Android APK (arm64)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - personal/main
+
+permissions:
+  contents: read
+
+env:
+  RUST_VERSION: '1.75'
+  CARGO_NDK_VERSION: '3.1.2'
+  NDK_VERSION: 'r28c'
+  ANDROID_FLUTTER_VERSION: '3.24.5'
+  VCPKG_COMMIT_ID: '9e593bb18ea69cc5095e012465dcd675a822ed0d'
+  VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+  APP_ID_SUFFIX: '.personal'
+  APK_NAME: 'RustDesk-Personal-Android-arm64.apk'
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  apk-arm64:
+    name: Build personal ARM64 APK
+    needs: [generate-bridge]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: false
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Export actions binary cache
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake curl gcc-multilib git g++ g++-multilib \
+            libayatana-appindicator3-dev libasound2-dev libc6-dev \
+            libclang-dev libunwind-dev libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev libgtk-3-dev libpulse-dev \
+            libva-dev libxcb-randr0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libxdo-dev llvm-dev nasm ninja-build \
+            openjdk-17-jdk-headless pkg-config tree wget
+
+      - name: Install Flutter matching the upstream Android build
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          flutter-version: ${{ env.ANDROID_FLUTTER_VERSION }}
+
+      - name: Apply upstream Flutter 3.24 patch
+        run: |
+          cd "$(dirname "$(dirname "$(command -v flutter)")")"
+          git apply "${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+
+      - name: Run personal feature tests
+        run: |
+          cd flutter
+          flutter pub get
+          flutter test test/soft_keyboard_diff_test.dart test/composed_text_sheet_test.dart
+
+      - name: Restore generated Flutter/Rust bridge
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Confirm bridge outputs are present
+        run: |
+          test -s flutter/lib/generated_bridge.dart
+          test -s src/bridge_generated.rs
+          test -s src/bridge_generated.io.rs
+
+      - name: Analyze changed Dart files (errors only, before the long native build)
+        run: |
+          cd flutter
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings \
+            lib/mobile/pages/remote_page.dart \
+            lib/models/input_model.dart \
+            lib/mobile/soft_keyboard_diff.dart \
+            lib/mobile/hangul_key.dart \
+            lib/mobile/widgets/composed_text_sheet.dart
+
+      - name: Install Android NDK
+        uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779
+        id: setup-ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+
+      - name: Set up vcpkg binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Build Android ARM64 native dependencies
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          ./flutter/build_android_deps.sh arm64-v8a
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-linux-android
+          components: rustfmt
+
+      - name: Cache ARM64 Rust build
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          prefix-key: personal-rustdesk-android-arm64
+
+      - name: Build RustDesk ARM64 JNI library
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          cargo install cargo-ndk --version "${{ env.CARGO_NDK_VERSION }}" --locked
+          ./flutter/ndk_arm64.sh
+          test -s ./target/aarch64-linux-android/release/liblibrustdesk.so
+          mkdir -p flutter/android/app/src/main/jniLibs/arm64-v8a
+          cp ./target/aarch64-linux-android/release/liblibrustdesk.so \
+            flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+          cp "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" \
+            flutter/android/app/src/main/jniLibs/arm64-v8a/
+
+      - name: Configure personal app ID and signing
+        env:
+          KEYSTORE_B64: ${{ secrets.PERSONAL_ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.PERSONAL_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PERSONAL_ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PERSONAL_ANDROID_KEY_PASSWORD }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path("flutter/android/app/build.gradle")
+          src = p.read_text()
+          original = 'applicationId "com.carriez.flutter_hbb"'
+          assert src.count(original) == 1, "Upstream Android applicationId contract changed"
+          src = src.replace(original, original + f'\n        applicationIdSuffix "{os.environ["APP_ID_SUFFIX"]}"')
+          if not os.environ.get("KEYSTORE_B64"):
+              original = "signingConfig signingConfigs.release"
+              assert src.count(original) == 1, "Upstream Android signing contract changed"
+              src = src.replace(original, "signingConfig signingConfigs.debug")
+          p.write_text(src)
+          gradle = Path("flutter/android/gradle.properties")
+          props = gradle.read_text()
+          assert "org.gradle.jvmargs=-Xmx1024M" in props, "Gradle memory contract changed"
+          gradle.write_text(props.replace(
+              "org.gradle.jvmargs=-Xmx1024M",
+              "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g",
+          ))
+          PY
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > flutter/android/app/personal-release.keystore
+            printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+              personal-release.keystore "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" \
+              > flutter/android/key.properties
+            echo "Signing with the fixed personal key: new builds install over the previous one."
+          else
+            echo "::warning::PERSONAL_ANDROID_KEYSTORE_B64 is not set; signing with an ephemeral debug key, which cannot update a previously installed build."
+          fi
+
+      - name: Keep only the outgoing client parts of the manifest
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          p = Path("flutter/android/app/src/main/AndroidManifest.xml")
+          ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+          ET.register_namespace('tools', 'http://schemas.android.com/tools')
+          a = '{http://schemas.android.com/apk/res/android}'
+          root = ET.parse(p).getroot()
+          app = root.find('application')
+          assert app is not None
+          host_parts = {
+              ('service', '.InputService'),
+              ('service', '.MainService'),
+              ('service', '.FloatingWindowService'),
+              ('receiver', '.BootReceiver'),
+          }
+          removed = set()
+          for node in list(app):
+              key = (node.tag, node.get(a + 'name'))
+              if key in host_parts:
+                  app.remove(node)
+                  removed.add(key)
+          if removed != host_parts:
+              raise SystemExit(f'Upstream host services changed: missing {host_parts - removed}')
+          # This build only controls other devices. FOREGROUND_SERVICE and
+          # FOREGROUND_SERVICE_SPECIAL_USE stay for RemoteSessionService.
+          unused = {
+              'android.permission.RECEIVE_BOOT_COMPLETED',
+              'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+              'android.permission.RECORD_AUDIO',
+              'android.permission.SYSTEM_ALERT_WINDOW',
+              'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION',
+              'android.permission.FOREGROUND_SERVICE_MICROPHONE',
+          }
+          for node in list(root):
+              if node.tag == 'uses-permission' and node.get(a + 'name') in unused:
+                  root.remove(node)
+          app.set(a + 'label', 'RustDesk Personal')
+          ET.ElementTree(root).write(p, encoding='utf-8', xml_declaration=True)
+          text = p.read_text()
+          if 'BIND_ACCESSIBILITY_SERVICE' in text:
+              raise SystemExit('Accessibility service remains in source manifest')
+          if '.RemoteSessionService' not in text:
+              raise SystemExit('RemoteSessionService missing from manifest')
+          print('Outgoing-only Android manifest prepared')
+          PY
+
+      - name: Build ARM64 release APK
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          cd flutter
+          flutter build apk --release --no-shrink --target-platform android-arm64 --split-per-abi
+          test -s build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "../${APK_NAME}"
+
+      - name: Verify APK manifest and signature
+        run: |
+          ls -lh "${APK_NAME}"
+          sha256sum "${APK_NAME}" | tee apk.sha256
+          BUILD_TOOLS="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+          "${BUILD_TOOLS}/aapt" dump badging "${APK_NAME}" | head -n 15
+          "${BUILD_TOOLS}/apksigner" verify --print-certs "${APK_NAME}"
+          "${BUILD_TOOLS}/aapt" dump xmltree "${APK_NAME}" AndroidManifest.xml > /tmp/manifest.txt
+          if grep -E 'BIND_ACCESSIBILITY_SERVICE|InputService|MainService|RECORD_AUDIO|SYSTEM_ALERT_WINDOW|RECEIVE_BOOT_COMPLETED' /tmp/manifest.txt; then
+            echo 'Host-side services or permissions remain in the built APK.' >&2
+            exit 1
+          fi
+          for required in "com.carriez.flutter_hbb${APP_ID_SUFFIX}" RemoteSessionService FOREGROUND_SERVICE_SPECIAL_USE; do
+            if ! grep -q "$required" /tmp/manifest.txt; then
+              echo "Missing from built manifest: $required" >&2
+              exit 1
+            fi
+          done
+
+      - name: Upload APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: RustDesk-Personal-Android-arm64
+          path: |
+            ${{ env.APK_NAME }}
+            apk.sha256
+          if-no-files-found: error
+          retention-days: 30
