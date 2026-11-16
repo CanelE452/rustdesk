@@ -23,6 +23,7 @@ import 'local_flutter_shortcuts.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
+import '../mobile/hangul_key.dart';
 
 /// Mouse button enum.
 enum MouseButtons { left, right, wheel, back, forward }
@@ -953,7 +954,8 @@ class InputModel {
       // FIXME: e.character is wrong for dead keys, eg: ^ in de
       newKeyboardMode(
           e.character ?? '',
-          e.physicalKey.usbHidUsage & 0xFFFF,
+          hangulKeyUsbHid(e.physicalKey.usbHidUsage & 0xFFFF,
+              androidToLinux: isAndroid && peerPlatform == kPeerPlatformLinux),
           // Show repeat event be converted to "release+press" events?
           e is KeyDownEvent || e is KeyRepeatEvent,
           iosCapsLock);

@@ -8,6 +8,8 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
+import 'package:flutter_hbb/mobile/soft_keyboard_diff.dart';
+import 'package:flutter_hbb/mobile/widgets/composed_text_sheet.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import 'package:flutter_svg/svg.dart';
@@ -112,6 +114,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
+  // Draft of the compose-and-send sheet; IME composition stays on this device.
+  final TextEditingController _composedTextController =
+      TextEditingController();
+  bool _isComposingText = false;
 
   _RemotePageState(String id) {
     initSharedStates(id);
@@ -130,6 +136,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
     );
+    if (isAndroid) {
+      // Android cuts network access a few seconds after the app leaves the
+      // screen unless a foreground service is running.
+      gFFI.invokeMethod("start_remote_session_service", widget.id);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       gFFI.dialogManager
@@ -196,6 +207,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // "Connecting...". Dispatching it here makes teardown happen synchronously on
     // pop; the `sessionClose` in `gFFI.close()` becomes a no-op once removed.
     unawaited(bind.sessionClose(sessionId: sessionId));
+    if (isAndroid) {
+      unawaited(gFFI.invokeMethod("stop_remote_session_service"));
+    }
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
@@ -203,6 +217,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.imageModel.disposeImage();
     gFFI.cursorModel.disposeImages();
     await gFFI.invokeMethod("enable_soft_keyboard", true);
+    _composedTextController.dispose();
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();
     clearWaylandKeyboardPromptSuppressedForConnection(sessionId.toString());
@@ -313,6 +328,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
             overlays: SystemUiOverlay.values);
+        // The compose-and-send sheet owns the keyboard while it is open.
+        if (_isComposingText) return;
         _mobileFocusNode.requestFocus();
       });
     }
@@ -380,38 +397,34 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // clipboard
       oldValue = '';
     }
-    // This length-only diff assumes the IME appends at the end. If an IME
-    // leaves the caret inside paired punctuation, later insertions can replay
-    // the closing symbol: "()" -> "(a)" sends ")" instead of "a". This is a
-    // client text-diff issue, independent of the host keyboard layout.
-    if (newValue.length == oldValue.length) {
-      // ?
-    } else if (newValue.length < oldValue.length) {
-      final char = 'VK_BACK';
-      inputModel.inputKey(char);
-    } else {
-      final content = newValue.substring(oldValue.length);
-      if (content.length > 1) {
-        if (oldValue != '' &&
-            content.length == 2 &&
-            (content == '""' ||
-                content == '()' ||
-                content == '[]' ||
-                content == '<>' ||
-                content == "{}" ||
-                content == '”“' ||
-                content == '《》' ||
-                content == '（）' ||
-                content == '【】')) {
-          // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          bind.sessionInputString(sessionId: sessionId, value: content);
-          _openKeyboardUnlocked();
-          return;
-        }
-        bind.sessionInputString(sessionId: sessionId, value: content);
-      } else {
-        inputChar(content);
-      }
+    // Compare contents, not lengths: Korean and other IMEs rewrite the
+    // character being composed in place ("아" -> "안").
+    final edit = softKeyboardEdit(oldValue, newValue);
+    final content = edit.insert;
+    if (edit.deleteCount == 0 &&
+        oldValue != '' &&
+        content.length == 2 &&
+        (content == '""' ||
+            content == '()' ||
+            content == '[]' ||
+            content == '<>' ||
+            content == "{}" ||
+            content == '”“' ||
+            content == '《》' ||
+            content == '（）' ||
+            content == '【】')) {
+      // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
+      bind.sessionInputString(sessionId: sessionId, value: content);
+      _openKeyboardUnlocked();
+      return;
+    }
+    for (var i = 0; i < edit.deleteCount; ++i) {
+      inputModel.inputKey('VK_BACK');
+    }
+    if (content.length > 1) {
+      bind.sessionInputString(sessionId: sessionId, value: content);
+    } else if (content.isNotEmpty) {
+      inputChar(content);
     }
   }
 
@@ -459,6 +472,67 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       return;
     }
     _openKeyboardUnlocked();
+  }
+
+  // Compose text on this device and send the finished string in one message,
+  // so IME composition never reaches the remote side.
+  void openTextComposer() {
+    final allowWaylandKeyboard =
+        mainGetPeerBoolOptionSync(widget.id, kPeerOptionAllowWaylandKeyboard);
+    if (shouldShowWaylandKeyboardPrompt(
+      connectionId: sessionId.toString(),
+      isWaylandPeer: _shouldGateKeyboardForWayland(),
+      allowWaylandKeyboardRemembered: allowWaylandKeyboard,
+    )) {
+      inputModel.keyboardInputAllowed = false;
+      showWaylandKeyboardInputWarningDialog(
+        id: widget.id,
+        connectionId: sessionId.toString(),
+        ffi: gFFI,
+        onEnable: () async {
+          _openTextComposerUnlocked();
+        },
+      );
+      return;
+    }
+    _openTextComposerUnlocked();
+  }
+
+  void _openTextComposerUnlocked() {
+    if (!mounted) return;
+    inputModel.keyboardInputAllowed = true;
+    _timer?.cancel();
+    setState(() {
+      _showEdit = false;
+      _isComposingText = true;
+    });
+    _mobileFocusNode.unfocus();
+    gFFI.invokeMethod("enable_soft_keyboard", true);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => ComposedTextSheet(
+        controller: _composedTextController,
+        onSend: (text) {
+          // A stale sheet must not send to a closed or view-only session;
+          // returning false keeps the draft.
+          if (!mounted ||
+              !gFFI.ffiModel.pi.isSet.value ||
+              gFFI.ffiModel.viewOnly ||
+              !gFFI.ffiModel.keyboard ||
+              !inputModel.keyboardInputAllowed) {
+            return false;
+          }
+          bind.sessionInputString(sessionId: sessionId, value: text);
+          return true;
+        },
+      ),
+    ).whenComplete(() {
+      if (!mounted) return;
+      setState(() => _isComposingText = false);
+      _physicalFocusNode.requestFocus();
+    });
   }
 
   void _openKeyboardUnlocked() {
@@ -649,6 +723,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                   color: Colors.white,
                                   icon: Icon(Icons.keyboard),
                                   onPressed: openKeyboard),
+                              IconButton(
+                                color: Colors.white,
+                                icon: const Icon(Icons.edit_note),
+                                tooltip: '문장 작성 후 전송',
+                                onPressed: openTextComposer,
+                              ),
                               IconButton(
                                 color: Colors.white,
                                 icon: Icon(gFFI.ffiModel.touchMode

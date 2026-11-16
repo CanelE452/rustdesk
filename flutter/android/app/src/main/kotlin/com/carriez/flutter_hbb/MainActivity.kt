@@ -20,6 +20,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.WindowManager
 import android.media.MediaCodecInfo
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
@@ -78,6 +79,7 @@ class MainActivity : FlutterActivity() {
 
     private var isAudioStart = false
     private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
+    private val touchpadMouseAdapter = TouchpadMouseAdapter()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -118,6 +120,26 @@ class MainActivity : FlutterActivity() {
             findViewById<FlutterView>(FlutterActivity.FLUTTER_VIEW_ID)?.requestFocus()
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        val mouseEvent = touchpadMouseAdapter.toMouseEvent(ev)
+            ?: return super.dispatchTouchEvent(ev)
+        try {
+            return super.dispatchTouchEvent(mouseEvent)
+        } finally {
+            mouseEvent.recycle()
+        }
+    }
+
+    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
+        val mouseEvent = touchpadMouseAdapter.toMouseEvent(ev)
+            ?: return super.dispatchGenericMotionEvent(ev)
+        try {
+            return super.dispatchGenericMotionEvent(mouseEvent)
+        } finally {
+            mouseEvent.recycle()
+        }
     }
 
     private fun requestMediaProjection() {
@@ -390,6 +412,14 @@ class MainActivity : FlutterActivity() {
                 }
                 "try_sync_clipboard" -> {
                     rdClipboardManager?.syncClipboard(true)
+                    result.success(true)
+                }
+                "start_remote_session_service" -> {
+                    RemoteSessionService.start(context, call.arguments as? String)
+                    result.success(true)
+                }
+                "stop_remote_session_service" -> {
+                    RemoteSessionService.stop(context)
                     result.success(true)
                 }
                 GET_START_ON_BOOT_OPT -> {
