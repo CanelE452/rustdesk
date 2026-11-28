@@ -9,27 +9,22 @@
 </p>
 
 
-## Downloads / 설치 파일 선택
+## Downloads / 설치 파일
 
-**개인 수정본 — 다운로드 링크**
+지금 쓰는 개인 빌드는 Android 앱 하나다. Windows·Ubuntu에는 아직 개인 수정이 없어서 공식 RustDesk 1.5.3을 그대로 쓴다.
 
-[**Android 휴대폰·태블릿 (ARM64) · APK 다운로드**](https://raw.githubusercontent.com/CanelE452/rustdesk/personal-apk-downloads/RustDesk-Personal-Android-RecoveryTest-arm64.apk) |
-[**Windows x64 · EXE 다운로드**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.exe) |
-[**Windows x64 · MSI 다운로드**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Windows-x64.msi) |
-[**Ubuntu x64 · DEB 다운로드**](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/RustDesk-Personal-Ubuntu-amd64.deb)
+- Android 태블릿·휴대폰 (ARM64): [RustDesk Personal v0.2.0 APK](https://github.com/CanelE452/rustdesk/releases/download/personal-android-v0.2.0/RustDesk-Personal-Android-arm64.apk)
+- Windows x64 (공식 1.5.3): [EXE](https://github.com/rustdesk/rustdesk/releases/download/1.5.3/rustdesk-1.5.3-x86_64.exe) · [MSI](https://github.com/rustdesk/rustdesk/releases/download/1.5.3/rustdesk-1.5.3-x86_64.msi)
+- Ubuntu x64 (공식 1.5.3): [DEB](https://github.com/rustdesk/rustdesk/releases/download/1.5.3/rustdesk-1.5.3-x86_64.deb)
 
-Android APK는 **연결 복구·터치패드·F키 진단을 포함한 시험용 버전**이야. [APK SHA-256](https://raw.githubusercontent.com/CanelE452/rustdesk/personal-apk-downloads/SHA256SUMS.txt) · [빌드 성공 기록](https://github.com/CanelE452/rustdesk/actions/runs/40868797058). 실기에서 모든 기능이 정상 작동하는지는 미검증이야. 다운로드 후 APK를 열고 Android 설치 확인을 해야 하며, **Play 프로텍트가 차단하면 우회하지 말고 설치를 중단해.**
+### Android 앱 안내
 
-Windows EXE·MSI는 공인 코드 서명이 없는 시험용 파일이야. Ubuntu DEB는 기존 RustDesk 패키지와 충돌하거나 이를 대체할 수 있어. 두 플랫폼의 다중 원격 창 동작도 실기 검증 전이야. [Windows·Ubuntu SHA-256](https://github.com/CanelE452/rustdesk/releases/download/personal-desktop-v0.1.0/SHA256SUMS.txt)
-
-**Official RustDesk downloads (unmodified / 공식 원본 프로그램)**
-
-[Windows x64 · EXE](https://github.com/rustdesk/rustdesk/releases/download/1.5.0/rustdesk-1.5.0-x86_64.exe) |
-[Ubuntu x64 · DEB](https://github.com/rustdesk/rustdesk/releases/download/1.5.0/rustdesk-1.5.0-x86_64.deb) |
-[macOS Apple Silicon · DMG](https://github.com/rustdesk/rustdesk/releases/download/1.5.0/rustdesk-1.5.0-aarch64.dmg) |
-[macOS Intel · DMG](https://github.com/rustdesk/rustdesk/releases/download/1.5.0/rustdesk-1.5.0-x86_64.dmg)
-
-These official binaries are provided by the [upstream RustDesk release (v1.5.0)](https://github.com/rustdesk/rustdesk/releases/tag/1.5.0), **not** built from CanelE452's modified source. Personal-source development and verification: [feature/samsung-hardware-input](https://github.com/CanelE452/rustdesk/tree/feature/samsung-hardware-input).
+- 앱 이름은 RustDesk Personal(패키지 `com.carriez.flutter_hbb.personal`)이다. 공식 RustDesk와 따로 설치된다.
+- 다른 기기를 조종하는 기능만 들어 있다. 이 기기를 원격으로 조종받는 기능은 뺐다.
+- 고정 키로 서명했다. 다음 버전은 지우지 않고 그 위에 설치하면 된다.
+- 예전 시험 앱(RecoveryTest 등)은 패키지와 서명이 달라 이 앱으로 업데이트되지 않는다. 지우고 새로 설치한다.
+- 상태: CI 빌드와 서명 확인까지 끝났고, 실기기 동작은 아직 확인 전이다. 바뀐 점은 [릴리스 노트](https://github.com/CanelE452/rustdesk/releases/tag/personal-android-v0.2.0)에 있다.
+- APK SHA-256 `4b21de7511a6f7f4f5918e8ee57cb253c38bfdfad9b1715773e4776069d344c5` · 소스 [personal/main 240ac19a](https://github.com/CanelE452/rustdesk/tree/240ac19a5bac3fdf589633f8a167492c9d4cc0c2) · [빌드 기록](https://github.com/CanelE452/rustdesk/actions/runs/43933601713)
 
 ---
 
